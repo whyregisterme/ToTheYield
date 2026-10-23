@@ -92,6 +92,8 @@ EOF
 echo "== 4/5 stage"
 cp "$HERE"/scripts/*.psc "$STAGE/Source/Scripts/"
 cp -r "$HERE/layer/$LAYER_ID" "$STAGE/SKSE/Plugins/SkyrimNet/external/"
+# Named after the mod so it never collides with another mod's LICENSE in Data/.
+cp "$HERE/LICENSE" "$STAGE/$NAME-LICENSE.txt"
 (cd "$STAGE" && find . -type f | sort)
 
 echo "== 5/5 zip"

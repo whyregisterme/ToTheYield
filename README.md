@@ -68,3 +68,7 @@ installed. It only reads the game folder.
 
 - SkyrimNet by the SkyrimNet team
 - PapyrusUtil by exiledviking; Papyrus Extender by powerofthree
+
+## License
+
+MIT. See [LICENSE](LICENSE).
