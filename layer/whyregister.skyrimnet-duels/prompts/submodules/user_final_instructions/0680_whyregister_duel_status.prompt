@@ -1,0 +1,16 @@
+{% if render_mode == "full" or render_mode == "thoughts" %}
+{#
+  SkyrimNet Duels: what a duel in progress means, for the two fighters and for anyone watching.
+  Renders nothing unless a duel is being fought: SNDuel_Main sets SNDuel_Status only then.
+  It sits after 0200_combat_status on purpose: that one tells a badly hurt NPC "every hit could be
+  fatal", which is not true in a duel.
+#}
+{% set duel = papyrus_util("GetStringValue", "none", "SNDuel_Status", "") %}
+{% if duel != "" %}
+{% if papyrus_util("GetIntValue", npc.UUID, "SNDuel_Opponent", 0) == 1 %}
+- You are fighting a formal duel with {{ player.name }} right now: real weapons, to the yield. Nobody is meant to die, whatever your wounds say. Keep words short, the way people talk mid-fight. If you are losing badly, yielding is no shame.
+{% else %}
+- {{ duel }} You are watching, not fighting: a short cheer, wince or remark at most, and do not join in.
+{% endif %}
+{% endif %}
+{% endif %}

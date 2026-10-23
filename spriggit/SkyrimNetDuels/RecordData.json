@@ -1,0 +1,22 @@
+{
+  "SpriggitSource": {
+    "PackageName": "Spriggit.Json.Skyrim",
+    "Version": "0.41"
+  },
+  "ModKey": "SkyrimNetDuels.esp",
+  "GameRelease": "SkyrimSE",
+  "ModHeader": {
+    "Flags": [
+      "Small"
+    ],
+    "Author": "whyregister",
+    "Description": "SkyrimNet Duels: formal duels with real weapons, fought to the yield.",
+    "MasterReferences": [
+      {
+        "Master": "Skyrim.esm",
+        "FileSize": 0
+      }
+    ],
+    "INTV": 1
+  }
+}

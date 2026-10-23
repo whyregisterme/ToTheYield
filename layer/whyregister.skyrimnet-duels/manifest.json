@@ -1,0 +1,15 @@
+{
+  "id": "whyregister.skyrimnet-duels",
+  "type": "bundle",
+  "title": "SkyrimNet Duels",
+  "tagline": "Formal duels with real weapons, fought to the yield. Nobody dies.",
+  "description": "NPCs can agree to a duel with the player, or challenge the player to one. The duel is fought with whatever weapons each side carries, until one of them yields or goes down; both are protected, so nobody dies. The player confirms every duel in a message box and yields by sheathing their weapon. SkyrimNet hears how each duel ended, so NPCs remember who won.\n\n**Requires:** SkyrimNetDuels.esp (shipped with this mod), PapyrusUtil, powerofthree's Papyrus Extender.",
+  "author": "whyregister",
+  "tags": ["combat"],
+  "nsfw": false,
+  "mods": [
+    { "name": "SkyrimNet Duels", "file": "SkyrimNetDuels.esp", "required": true }
+  ],
+  "version": "0.1.2",
+  "min_skyrimnet_version": "0.28.0"
+}

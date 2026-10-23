@@ -1,0 +1,27 @@
+# Lets the opponent concede in the middle of a duel: SNDuel_Main.YieldDuel on quest SNDuel_Quest.
+name: YieldDuel
+description: >-
+  Concede the duel you are fighting with {{ player.name }}: lower your weapon and admit defeat.
+  Use it when you are badly hurt, clearly outmatched, or have seen enough to respect
+  {{ player.name }}.
+
+questEditorId: SNDuel_Quest
+scriptName: SNDuel_Main
+executionFunctionName: YieldDuel
+
+# Function YieldDuel(Actor akSpeaker)
+parameterMapping:
+  - type: speaker
+
+eligibilityRules:
+  - conditions:
+      # SNDuel_Opponent is 1 on the NPC only while they are fighting a duel with the player.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "SNDuel_Opponent", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: AND
+    required: true
+
+eventString: "{{ actor_name }} conceded the duel to {{ player.name }}."
+defaultPriority: 6
