@@ -15,6 +15,9 @@ Scriptname TTY_Main extends Quest
      TTY_Opponent           int, on the NPC      1 while that NPC is the opponent
      TTY_Status             string, global       one line about the duel, for spectators' prompts
      TTY_SetPlayerEssential int, global          1 while the player is essential because of us
+     TTY_RankNpc            form, global         the NPC whose relationship rank a duel lowered
+     TTY_RankNpcToPlayer    int, global          that NPC's rank toward the player before the duel
+     TTY_RankPlayerToNpc    int, global          the player's rank toward that NPC before the duel
 
  Stuck? From the console: stopquest TTY_Quest, then startquest TTY_Quest. OnInit runs again
  and Reset puts everything back. If you are still immortal after that: setessential 7 0}
@@ -30,13 +33,12 @@ Message Property ConfirmMsg Auto
  lets the <Alias=Opponent> tag resolve to the NPC's name.}
 
 Faction Property BrawlFaction Auto
-{Skyrim.esm DGIntimidateFaction (0x04CFA6), the faction vanilla brawls use. Both fighters join it
- when the opponent likes the player (see StartFight), or for every duel while UseBrawlFaction is 1.}
+{Skyrim.esm DGIntimidateFaction (0x04CFA6), the faction vanilla brawls use. Only used while
+ UseBrawlFaction is 1. SeverActions' brawl manager watches the same faction.}
 
 GlobalVariable Property UseBrawlFaction Auto
-{TTY_UseBrawlFaction, default 0. 0: the brawl faction only for opponents who like the player, who
- will not fight without it. 1: for every duel, which may also keep guards and bystanders out of it.
- Console: set TTY_UseBrawlFaction to 1}
+{TTY_UseBrawlFaction, default 0. 1 also puts both fighters in the vanilla brawl faction, which may
+ keep guards and bystanders out of it. Console: set TTY_UseBrawlFaction to 1}
 
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.25 AutoReadOnly
@@ -52,7 +54,6 @@ float Property RekickSeconds = 1.0 AutoReadOnly          ; between StartCombat r
 float Property EngageGraceSeconds = 4.0 AutoReadOnly     ; opponent out of the fight this long = called off
 
 Actor opponent = None
-bool opponentWasTeammate = false
 bool brawlFactionUsed = false
 float startTime = 0.0
 float sheathedSince = 0.0
@@ -140,6 +141,7 @@ Function OnGameLoad()
     elseif GetState() == ""
         ; A crash or a quit mid-duel never reaches FinishDuel. Undo what it would have undone.
         RestorePlayerEssential()
+        RestoreRanks()
     endif
 EndFunction
 
@@ -156,6 +158,8 @@ string Function CannotDuelReason(Actor akNpc)
         return "no opponent"
     elseif akNpc.IsChild()
         return "not with a child"
+    elseif IsFollower(akNpc)
+        return akNpc.GetDisplayName() + " is your companion. Dismiss them first to duel"
     elseif akNpc.IsInCombat() || player.IsInCombat()
         return "someone is already fighting"
     elseif akNpc.IsOnMount() || player.IsOnMount()
@@ -166,6 +170,18 @@ string Function CannotDuelReason(Actor akNpc)
         return akNpc.GetDisplayName() + " is too far away"
     endif
     return ""
+EndFunction
+
+; A current follower cannot be dueled. Tested live on a SeverActions companion, 2026-10-23: the
+; follower factions keep them from fighting the player whatever their rank, and SeverActions'
+; friendly-fire guard stops the fight when the brawl faction overrides that. Clearing the teammate
+; flag also sets off its follower tracker. Dismissed, the same NPC duels fine.
+bool Function IsFollower(Actor akNpc)
+    if akNpc.IsPlayerTeammate()
+        return true
+    endif
+    Faction currentFollower = Game.GetFormFromFile(0x0005C84E, "Skyrim.esm") as Faction
+    return currentFollower && akNpc.IsInFaction(currentFollower)
 EndFunction
 
 Function StartFight(Actor akNpc)
@@ -182,15 +198,11 @@ Function StartFight(Actor akNpc)
     endif
 
     ; Someone who likes the player drops a StartCombat against them at once. Tested live on a
-    ; SeverActions follower (rank 3, teammate), 2026-10-23: only clearing the teammate flag AND
-    ; joining the brawl faction kept them fighting (20 s); either alone did nothing, as did neither.
-    ; Neutral NPCs (guards) fight without the faction.
-    opponentWasTeammate = akNpc.IsPlayerTeammate()
-    if opponentWasTeammate
-        akNpc.SetPlayerTeammate(false)
-    endif
+    ; dismissed follower (rank 3), 2026-10-23: with both ranks set to 0 they fought every sample of
+    ; two 10 s runs; at rank 3 they never did. Neutral NPCs (guards) are at 0 already.
+    LowerRanks(akNpc)
 
-    brawlFactionUsed = BrawlFaction && (opponentWasTeammate || akNpc.GetRelationshipRank(player) > 0 || (UseBrawlFaction && UseBrawlFaction.GetValue() > 0))
+    brawlFactionUsed = BrawlFaction && UseBrawlFaction && UseBrawlFaction.GetValue() > 0
     if brawlFactionUsed
         akNpc.AddToFaction(BrawlFaction)
         player.AddToFaction(BrawlFaction)
@@ -364,9 +376,7 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     ;    left bleedout, so a stray blow cannot kill it on the ground.
     Utility.Wait(3.0)
     StopTheFight(npc, calmPlayer)
-    if opponentWasTeammate && npc && !npc.IsDead()
-        npc.SetPlayerTeammate(true)
-    endif
+    RestoreRanks()
     RestorePlayerEssential()
     int waited = 0
     while npc && npc.IsBleedingOut() && waited < 10
@@ -380,7 +390,6 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
         StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
     endif
     opponent = None
-    opponentWasTeammate = false
     brawlFactionUsed = false
     GoToState("")
 EndFunction
@@ -461,6 +470,34 @@ Function RestorePlayerEssential()
     endif
 EndFunction
 
+; Relationship ranks are saved with the game, so the originals go in the co-save: a reload, a
+; crash or a quest restart can always put them back (OnGameLoad, Reset), like the essential flag.
+Function LowerRanks(Actor akNpc)
+    Actor player = Game.GetPlayer()
+    int npcToPlayer = akNpc.GetRelationshipRank(player)
+    int playerToNpc = player.GetRelationshipRank(akNpc)
+    if npcToPlayer <= 0 && playerToNpc <= 0
+        return
+    endif
+    StorageUtil.SetFormValue(None, "TTY_RankNpc", akNpc)
+    StorageUtil.SetIntValue(None, "TTY_RankNpcToPlayer", npcToPlayer)
+    StorageUtil.SetIntValue(None, "TTY_RankPlayerToNpc", playerToNpc)
+    akNpc.SetRelationshipRank(player, 0)
+    player.SetRelationshipRank(akNpc, 0)
+EndFunction
+
+Function RestoreRanks()
+    Actor npc = StorageUtil.GetFormValue(None, "TTY_RankNpc") as Actor
+    if npc
+        Actor player = Game.GetPlayer()
+        npc.SetRelationshipRank(player, StorageUtil.GetIntValue(None, "TTY_RankNpcToPlayer", 0))
+        player.SetRelationshipRank(npc, StorageUtil.GetIntValue(None, "TTY_RankPlayerToNpc", 0))
+    endif
+    StorageUtil.UnsetFormValue(None, "TTY_RankNpc")
+    StorageUtil.UnsetIntValue(None, "TTY_RankNpcToPlayer")
+    StorageUtil.UnsetIntValue(None, "TTY_RankPlayerToNpc")
+EndFunction
+
 ; Puts everything back, from any state. Runs on first start and when the quest is restarted.
 Function Reset()
     UnregisterForUpdate()
@@ -469,9 +506,6 @@ Function Reset()
         if npc
             npc.StopCombat()
             StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
-            if opponentWasTeammate
-                npc.SetPlayerTeammate(true)
-            endif
             if brawlFactionUsed
                 npc.RemoveFromFaction(BrawlFaction)
             endif
@@ -487,8 +521,8 @@ Function Reset()
     StorageUtil.UnsetIntValue(None, "TTY_Active")
     StorageUtil.UnsetStringValue(None, "TTY_Status")
     RestorePlayerEssential()
+    RestoreRanks()
     opponent = None
-    opponentWasTeammate = false
     brawlFactionUsed = false
     GoToState("")
 EndFunction

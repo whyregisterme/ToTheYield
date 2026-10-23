@@ -15,11 +15,16 @@ executionFunctionName: BeginDuel
 parameterMapping:
   - type: speaker
 
-# Distance, mounts, children and hostility are checked in Papyrus (CannotDuelReason).
+# Distance, mounts, children, hostility and followers are also checked in Papyrus (CannotDuelReason).
 eligibilityRules:
   - conditions:
       - decoratorName: is_in_combat
         arguments: ["currentActor"]
+        comparisonOperator: "=="
+        expectedValue: false
+      # Current followers won't fight the player (tested); TTY_Main refuses them too, with a hint.
+      - decoratorName: is_in_faction
+        arguments: ["currentActor", "CurrentFollowerFaction"]
         comparisonOperator: "=="
         expectedValue: false
       # TTY_Active is set by TTY_Main while a duel is being fought.
