@@ -17,6 +17,9 @@
         "FileSize": 0
       }
     ],
-    "INTV": 1
+    "INTV": 1,
+    "Stats": {
+      "Version": 1.7
+    }
   }
 }

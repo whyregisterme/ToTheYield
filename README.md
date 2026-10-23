@@ -19,6 +19,10 @@ manager (Vortex or MO2). Enable `SkyrimNetDuels.esp`. It's ESL-flagged, so it ta
 
 Updating: replace the old version rather than installing alongside it.
 
+**Game versions:** tested on 1.6.1170. There is no DLL, so the mod itself doesn't depend on the game
+version; it runs wherever SkyrimNet, PapyrusUtil and Papyrus Extender do. The plugin uses header
+version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
+
 ## Playing
 
 - **Starting a duel.** Ask an NPC to duel, or an NPC may challenge you. A box asks you to confirm:
