@@ -29,6 +29,8 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
   - **Fight** starts the duel.
   - **Refuse** declines, and the NPC hears that you turned them down.
   - **Refuse silently** declines without telling the NPC.
+- **No box, no duel.** The confirm box is the only sign a duel has really started and that you're both
+  protected. If an NPC agrees but no box appears, the duel didn't start: don't attack them, ask again.
 - **Yielding.** Sheathe your weapon for about 4 seconds. The NPC can also concede on their own.
 - **Nobody dies.** Your opponent kneels when beaten. You drop at zero health and they stop attacking.
   Afterwards, whoever went down gets back up with some health.

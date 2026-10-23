@@ -23,10 +23,13 @@ eligibilityRules:
         comparisonOperator: "=="
         expectedValue: false
       # Current followers won't fight the player (tested); TTY_Main refuses them too, with a hint.
-      - decoratorName: is_in_faction
+      # Rank, not is_in_faction: a dismissed follower keeps the faction at rank -1, which
+      # is_in_faction still counts (0.2.2 blocked dismissed followers that way). get_faction_rank
+      # gives -1 for both "dismissed" and "never a follower"; current followers are 0 or more.
+      - decoratorName: get_faction_rank
         arguments: ["currentActor", "CurrentFollowerFaction"]
-        comparisonOperator: "=="
-        expectedValue: false
+        comparisonOperator: "<"
+        expectedValue: 0
       # TTY_Active is set by TTY_Main while a duel is being fought.
       - decoratorName: papyrus_util
         arguments: ["GetIntValue", "none", "TTY_Active", 0]
