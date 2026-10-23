@@ -30,12 +30,13 @@ Message Property ConfirmMsg Auto
  lets the <Alias=Opponent> tag resolve to the NPC's name.}
 
 Faction Property BrawlFaction Auto
-{Skyrim.esm DGIntimidateFaction (0x04CFA6). Only used while UseBrawlFaction is 1.}
+{Skyrim.esm DGIntimidateFaction (0x04CFA6), the faction vanilla brawls use. Both fighters join it
+ when the opponent likes the player (see StartFight), or for every duel while UseBrawlFaction is 1.}
 
 GlobalVariable Property UseBrawlFaction Auto
-{TTY_UseBrawlFaction, default 0. A test lever: 1 also puts both fighters in the vanilla brawl
- faction, which may keep guards and bystanders out of it. Off by default because SeverActions'
- brawls use the same faction. Console: set TTY_UseBrawlFaction to 1}
+{TTY_UseBrawlFaction, default 0. 0: the brawl faction only for opponents who like the player, who
+ will not fight without it. 1: for every duel, which may also keep guards and bystanders out of it.
+ Console: set TTY_UseBrawlFaction to 1}
 
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.25 AutoReadOnly
@@ -47,6 +48,8 @@ float Property MaxStartDistance = 1500.0 AutoReadOnly    ; game units, about 21 
 float Property WalkAwayDistance = 3000.0 AutoReadOnly
 float Property RecoverHealthFraction = 0.3 AutoReadOnly  ; of base health, for whoever went down
 int Property CooldownSeconds = 120 AutoReadOnly          ; before BeginDuel is offered again
+float Property RekickSeconds = 1.0 AutoReadOnly          ; between StartCombat retries
+float Property EngageGraceSeconds = 4.0 AutoReadOnly     ; opponent out of the fight this long = called off
 
 Actor opponent = None
 bool opponentWasTeammate = false
@@ -54,6 +57,8 @@ bool brawlFactionUsed = false
 float startTime = 0.0
 float sheathedSince = 0.0
 bool playerHasDrawn = false
+float lastRekick = 0.0
+float disengagedSince = 0.0
 
 ; States: "" (no duel), "Fighting", "Ending" (cleaning up; no new duel can start).
 
@@ -176,13 +181,16 @@ Function StartFight(Actor akNpc)
         StorageUtil.SetIntValue(None, "TTY_SetPlayerEssential", 1)
     endif
 
-    ; A follower will not fight the player while flagged a teammate.
+    ; Someone who likes the player drops a StartCombat against them at once. Tested live on a
+    ; SeverActions follower (rank 3, teammate), 2026-10-23: only clearing the teammate flag AND
+    ; joining the brawl faction kept them fighting (20 s); either alone did nothing, as did neither.
+    ; Neutral NPCs (guards) fight without the faction.
     opponentWasTeammate = akNpc.IsPlayerTeammate()
     if opponentWasTeammate
         akNpc.SetPlayerTeammate(false)
     endif
 
-    brawlFactionUsed = UseBrawlFaction && UseBrawlFaction.GetValue() > 0
+    brawlFactionUsed = BrawlFaction && (opponentWasTeammate || akNpc.GetRelationshipRank(player) > 0 || (UseBrawlFaction && UseBrawlFaction.GetValue() > 0))
     if brawlFactionUsed
         akNpc.AddToFaction(BrawlFaction)
         player.AddToFaction(BrawlFaction)
@@ -201,6 +209,8 @@ Function StartFight(Actor akNpc)
 
     startTime = Utility.GetCurrentRealTime()
     sheathedSince = 0.0
+    lastRekick = startTime
+    disengagedSince = 0.0
     playerHasDrawn = player.IsWeaponDrawn()
     akNpc.DrawWeapon()
     Utility.Wait(LeadInSeconds)
@@ -251,10 +261,23 @@ State Fighting
         endif
 
         ; The engine can drop a scripted fight, or the opponent can turn on a follower: keep it on
-        ; the player. (SeverActions re-issues StartCombat for the same reason.)
-        if now - startTime > LeadInSeconds + 2.0
-            if !opponent.IsInCombat() || opponent.GetCombatTarget() != player
-                opponent.StartCombat(player)
+        ; the player, once a second (SeverActions re-issues StartCombat for the same reason). An
+        ; opponent who stays out of it is not going to fight: call the duel off rather than retry for
+        ; three minutes (0.2.0 did, and a follower drew and sheathed about 70 times).
+        if now - startTime > LeadInSeconds + 0.5
+            if opponent.IsInCombat() && opponent.GetCombatTarget() == player
+                disengagedSince = 0.0
+            else
+                if disengagedSince == 0.0
+                    disengagedSince = now
+                elseif now - disengagedSince >= EngageGraceSeconds
+                    EndDuel(None, None, "would_not_fight")
+                    return
+                endif
+                if now - lastRekick >= RekickSeconds
+                    lastRekick = now
+                    opponent.StartCombat(player)
+                endif
             endif
         endif
         KeepFollowersOut(opponent)
@@ -423,6 +446,8 @@ string Function Outcome(Actor akNpc, Actor akWinner, Actor akLoser, string asHow
         return "*Neither " + p + " nor " + n + " can finish it. The duel ends in a draw.*"
     elseif asHow == "never_drew"
         return "*" + p + " never draws a weapon, and the duel with " + n + " is called off.*"
+    elseif asHow == "would_not_fight"
+        return "*" + n + " won't raise a weapon against " + p + ", and the duel is called off.*"
     elseif asHow == "interrupted"
         return "*Someone else joins the fight, and the duel between " + p + " and " + n + " is called off.*"
     endif
@@ -447,8 +472,14 @@ Function Reset()
             if opponentWasTeammate
                 npc.SetPlayerTeammate(true)
             endif
+            if brawlFactionUsed
+                npc.RemoveFromFaction(BrawlFaction)
+            endif
         endif
         OpponentAlias.Clear()
+    endif
+    if brawlFactionUsed
+        Game.GetPlayer().RemoveFromFaction(BrawlFaction)
     endif
     if PlayerAliasScript
         PlayerAliasScript.StopWatching()

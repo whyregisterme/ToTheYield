@@ -34,12 +34,15 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
   Afterwards, whoever went down gets back up with some health.
 - **A duel also ends** if you walk away, never draw your weapon, someone outside the duel attacks
   either of you, or 3 minutes pass. Your followers are kept out of it.
+- **Friends and followers can duel you.** If your opponent won't actually fight (stays out of combat
+  for about 4 seconds), the duel is called off instead of dragging on.
 - You can't duel while either of you is already in combat or on horseback, against someone hostile to you, or with a child. Your opponent has to be close by.
 
 ## Console levers
 
-- `set TTY_UseBrawlFaction to 1`: also puts both fighters in the vanilla brawl faction, in case
-  guards or bystanders keep joining in. Default 0, because other mods' brawls use the same faction.
+- `set TTY_UseBrawlFaction to 1`: puts both fighters in the vanilla brawl faction for every duel, in
+  case guards or bystanders keep joining in. At the default 0 it's only used when your opponent likes
+  you, since friends and followers won't fight you without it.
 - If a duel ever gets stuck: `stopquest TTY_Quest`, then `startquest TTY_Quest`. If you're
   still unkillable afterwards: `setessential 7 0`.
 
@@ -56,6 +59,9 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 - Protection: the NPC sits in an Essential quest alias, so they go into bleedout instead of dying.
   The player is set essential only for the duel. The vanilla brawl faction alone does **not** stop
   weapon damage.
+- Friends and followers: someone who likes you drops out of any fight with you at once. Tested live
+  on a follower: only clearing their teammate flag **and** putting both of you in the brawl faction
+  kept them fighting. Either one alone did nothing.
 - Afterwards, combat is stopped three times over 4 seconds (once wasn't enough in testing), flags are
   restored, and SkyrimNet gets a narration of the outcome.
 
