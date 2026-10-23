@@ -192,7 +192,9 @@ Function StartFight(Actor akNpc)
     StorageUtil.SetIntValue(None, "SNDuel_Active", 1)
     StorageUtil.SetIntValue(akNpc, "SNDuel_Opponent", 1)
     StorageUtil.SetStringValue(None, "SNDuel_Status", names + " are fighting a formal duel with real weapons, to the yield. Nobody is meant to die.")
-    SkyrimNetApi.RegisterEvent("custom", names + " began a duel to the yield, with real weapons.", akNpc, player)
+    ; 'custom' rejects a plain string (SkyrimNet logs "Invalid value for field 'data'"). persistent_generic
+    ; takes JSON with a "line" field, the form other mods' events pass validation with, and is kept as a memory.
+    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(names + " began a duel to the yield, with real weapons.") + "\"}", akNpc, player)
 
     PlayerAliasScript.WatchDuel(akNpc)
     Debug.Notification("Duel with " + akNpc.GetDisplayName() + ". Sheathe your weapon to yield.")
@@ -389,6 +391,22 @@ Function KeepFollowersOut(Actor akNpc)
 EndFunction
 
 ; The narration SkyrimNet gets when a duel ends. Asterisks mark it as narration, not speech.
+; Display names go into a JSON string, so quotes and backslashes in them must be escaped.
+string Function JsonEscape(string asText)
+    string out = ""
+    int len = StringUtil.GetLength(asText)
+    int i = 0
+    while i < len
+        string c = StringUtil.GetNthChar(asText, i)
+        if c == "\"" || c == "\\"
+            out += "\\"
+        endif
+        out += c
+        i += 1
+    endwhile
+    return out
+EndFunction
+
 string Function Outcome(Actor akNpc, Actor akWinner, Actor akLoser, string asHow)
     string p = Game.GetPlayer().GetDisplayName()
     string n = "their opponent"

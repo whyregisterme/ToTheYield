@@ -23,7 +23,7 @@ STAGE="$BUILD/stage"
 rm -rf "$BUILD"
 mkdir -p "$STAGE/Scripts" "$STAGE/Source/Scripts" "$STAGE/SKSE/Plugins/SkyrimNet/external" "$HERE/dist"
 
-echo "== 1/5 compile Papyrus"
+echo "== 1/6 compile Papyrus"
 # Bethesda's flags file (Hidden, Conditional), read from the game's script sources.
 FLAGS="$(cygpath -w "$TOOLS/../Data/Source/Scripts/TESV_Papyrus_Flags.flg")"
 # Compile against the game's own script sources, not the example repo's headers: those have the
@@ -55,10 +55,10 @@ EOF
 if grep -aqi "$USERNAME" "$STAGE"/Scripts/*.pex; then echo "pex still names $USERNAME"; exit 1; fi
 ls "$STAGE/Scripts"
 
-echo "== 2/5 build $NAME.esp"
+echo "== 2/6 build $NAME.esp"
 bash "$TOOLS/spriggit-cli.sh" deserialize --InputPath "$HERE/spriggit/$NAME" --OutputPath "$STAGE/$NAME.esp" 2>&1 | tail -1
 
-echo "== 3/5 round-trip check"
+echo "== 3/6 round-trip check"
 bash "$TOOLS/spriggit-cli.sh" serialize --InputPath "$STAGE/$NAME.esp" --OutputPath "$BUILD/roundtrip/$NAME" \
     --GameRelease SkyrimSE --PackageName Spriggit.Json --PackageVersion 0.41.0 2>&1 | tail -1
 python - "$(cygpath -w "$HERE/spriggit/$NAME")" "$(cygpath -w "$BUILD/roundtrip/$NAME")" <<'EOF'
@@ -89,15 +89,29 @@ print('round trip: %d file(s), %d difference(s)' % (len(a), bad))
 sys.exit(1 if bad else 0)
 EOF
 
-echo "== 4/5 stage"
+echo "== 4/6 stage"
 cp "$HERE"/scripts/*.psc "$STAGE/Source/Scripts/"
 cp -r "$HERE/layer/$LAYER_ID" "$STAGE/SKSE/Plugins/SkyrimNet/external/"
 # Named after the mod so it never collides with another mod's LICENSE in Data/.
 cp "$HERE/LICENSE" "$STAGE/$NAME-LICENSE.txt"
 (cd "$STAGE" && find . -type f | sort)
 
-echo "== 5/5 zip"
+echo "== 5/6 zip"
 ZIP="$HERE/dist/$NAME-$VERSION.zip"
 rm -f "$ZIP"
-powershell.exe -NoProfile -Command "Compress-Archive -Path '$(cygpath -w "$STAGE")\\*' -DestinationPath '$(cygpath -w "$ZIP")'"
+# Not Compress-Archive: Windows PowerShell 5.1 writes '\' into entry names, against the zip spec, and
+# extractors that follow the spec unpack those as flat files with backslashes in their names.
+python - "$(cygpath -w "$STAGE")" "$(cygpath -w "$ZIP")" <<'EOF'
+import os, sys, zipfile
+stage, out = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(stage):
+        dirs.sort()
+        for f in sorted(files):
+            full = os.path.join(root, f)
+            z.write(full, os.path.relpath(full, stage).replace(os.sep, '/'))
+EOF
 ls -la "$ZIP"
+
+echo "== 6/6 release check"
+python "$(cygpath -w "$HERE/verify_release.py")" "$(cygpath -w "$ZIP")" "$LAYER_ID" "$VERSION" "$USERNAME" "$COMPUTERNAME" "SteamLibrary"
