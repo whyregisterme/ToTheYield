@@ -1,12 +1,12 @@
-Scriptname SNDuel_PlayerAlias extends ReferenceAlias
-{On the PlayerAlias of SNDuel_Quest. After every load it lets SNDuel_Main undo a duel's flags, and
+Scriptname TTY_PlayerAlias extends ReferenceAlias
+{On the PlayerAlias of TTY_Quest. After every load it lets TTY_Main undo a duel's flags, and
  while a duel runs it notices anyone outside the duel attacking the player.}
 
 Actor duelOpponent = None
 
 Event OnPlayerLoadGame()
-    ; The cast is None if SNDuel_Main failed to load; check it rather than log an error per load.
-    SNDuel_Main main = GetOwningQuest() as SNDuel_Main
+    ; The cast is None if TTY_Main failed to load; check it rather than log an error per load.
+    TTY_Main main = GetOwningQuest() as TTY_Main
     if main
         main.OnGameLoad()
     endif
@@ -30,7 +30,7 @@ State Watching
         if !attacker || attacker == duelOpponent || attacker == GetActorReference()
             return
         endif
-        SNDuel_Main main = GetOwningQuest() as SNDuel_Main
+        TTY_Main main = GetOwningQuest() as TTY_Main
         if main
             main.OnOutsideAttack(attacker)
         endif

@@ -1,5 +1,5 @@
-Scriptname SNDuel_Main extends Quest
-{SkyrimNet Duels: a formal duel with real weapons, fought until one side yields or goes down.
+Scriptname TTY_Main extends Quest
+{To the Yield: a formal duel with real weapons, fought until one side yields or goes down.
 
  Nobody dies. The opponent is put in the Opponent alias, which is flagged Essential, so at zero
  health they kneel in bleedout. The player is made essential for the duration: at zero health the
@@ -11,18 +11,18 @@ Scriptname SNDuel_Main extends Quest
 
  StorageUtil keys. The layer's YAML and prompt read the same strings with papyrus_util, so rename
  one here and you must rename it there too:
-     SNDuel_Active             int, global (None)   1 while a duel is being fought
-     SNDuel_Opponent           int, on the NPC      1 while that NPC is the opponent
-     SNDuel_Status             string, global       one line about the duel, for spectators' prompts
-     SNDuel_SetPlayerEssential int, global          1 while the player is essential because of us
+     TTY_Active             int, global (None)   1 while a duel is being fought
+     TTY_Opponent           int, on the NPC      1 while that NPC is the opponent
+     TTY_Status             string, global       one line about the duel, for spectators' prompts
+     TTY_SetPlayerEssential int, global          1 while the player is essential because of us
 
- Stuck? From the console: stopquest SNDuel_Quest, then startquest SNDuel_Quest. OnInit runs again
+ Stuck? From the console: stopquest TTY_Quest, then startquest TTY_Quest. OnInit runs again
  and Reset puts everything back. If you are still immortal after that: setessential 7 0}
 
 ReferenceAlias Property OpponentAlias Auto
 {The Opponent alias. Flagged Essential and Optional in the plugin: filling it is what protects the NPC.}
 
-SNDuel_PlayerAlias Property PlayerAliasScript Auto
+TTY_PlayerAlias Property PlayerAliasScript Auto
 {The PlayerAlias, which notices outside attackers while a duel runs and calls OnGameLoad.}
 
 Message Property ConfirmMsg Auto
@@ -33,9 +33,9 @@ Faction Property BrawlFaction Auto
 {Skyrim.esm DGIntimidateFaction (0x04CFA6). Only used while UseBrawlFaction is 1.}
 
 GlobalVariable Property UseBrawlFaction Auto
-{SNDuel_UseBrawlFaction, default 0. A test lever: 1 also puts both fighters in the vanilla brawl
+{TTY_UseBrawlFaction, default 0. A test lever: 1 also puts both fighters in the vanilla brawl
  faction, which may keep guards and bystanders out of it. Off by default because SeverActions'
- brawls use the same faction. Console: set SNDuel_UseBrawlFaction to 1}
+ brawls use the same faction. Console: set TTY_UseBrawlFaction to 1}
 
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.25 AutoReadOnly
@@ -70,7 +70,7 @@ EndEvent
 Function BeginDuel(Actor akSpeaker)
     ; Unfilled properties would otherwise surface as "Cannot call X() on a None object" spam.
     if !OpponentAlias || !ConfirmMsg || !PlayerAliasScript
-        Debug.Trace("[SNDuel] SNDuel_Quest properties are not filled; is SkyrimNetDuels.esp enabled?", 2)
+        Debug.Trace("[TTY] TTY_Quest properties are not filled; is ToTheYield.esp enabled?", 2)
         return
     endif
     string reason = CannotDuelReason(akSpeaker)
@@ -93,7 +93,7 @@ Function BeginDuel(Actor akSpeaker)
             SkyrimNetApi.DirectNarration("*" + player.GetDisplayName() + " refuses to duel " + akSpeaker.GetDisplayName() + ".*", akSpeaker, player)
         else
             ; Silent: nothing recorded, nothing said.
-            Debug.Trace("[SNDuel] Player silently refused a duel with " + akSpeaker.GetDisplayName())
+            Debug.Trace("[TTY] Player silently refused a duel with " + akSpeaker.GetDisplayName())
         endif
         return
     endif
@@ -125,7 +125,7 @@ EndFunction
 Function EndDuel(Actor akWinner, Actor akLoser, string asHow)
 EndFunction
 
-; SNDuel_PlayerAlias.OnPlayerLoadGame.
+; TTY_PlayerAlias.OnPlayerLoadGame.
 Function OnGameLoad()
     ; GetCurrentRealTime restarts with every game launch, so a duel saved mid-fight restarts its clock.
     startTime = Utility.GetCurrentRealTime()
@@ -173,7 +173,7 @@ Function StartFight(Actor akNpc)
     ActorBase playerBase = player.GetActorBase()
     if !playerBase.IsEssential()
         playerBase.SetEssential(true)
-        StorageUtil.SetIntValue(None, "SNDuel_SetPlayerEssential", 1)
+        StorageUtil.SetIntValue(None, "TTY_SetPlayerEssential", 1)
     endif
 
     ; A follower will not fight the player while flagged a teammate.
@@ -189,9 +189,9 @@ Function StartFight(Actor akNpc)
     endif
 
     string names = akNpc.GetDisplayName() + " and " + player.GetDisplayName()
-    StorageUtil.SetIntValue(None, "SNDuel_Active", 1)
-    StorageUtil.SetIntValue(akNpc, "SNDuel_Opponent", 1)
-    StorageUtil.SetStringValue(None, "SNDuel_Status", names + " are fighting a formal duel with real weapons, to the yield. Nobody is meant to die.")
+    StorageUtil.SetIntValue(None, "TTY_Active", 1)
+    StorageUtil.SetIntValue(akNpc, "TTY_Opponent", 1)
+    StorageUtil.SetStringValue(None, "TTY_Status", names + " are fighting a formal duel with real weapons, to the yield. Nobody is meant to die.")
     ; 'custom' rejects a plain string (SkyrimNet logs "Invalid value for field 'data'"). persistent_generic
     ; takes JSON with a "line" field, the form other mods' events pass validation with, and is kept as a memory.
     SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(names + " began a duel to the yield, with real weapons.") + "\"}", akNpc, player)
@@ -306,13 +306,13 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
         endif
         player.RemoveFromFaction(BrawlFaction)
     endif
-    ; Clear the duel keys now, not after the waits below: while SNDuel_Opponent is set, YieldDuel is
+    ; Clear the duel keys now, not after the waits below: while TTY_Opponent is set, YieldDuel is
     ; still offered, and in testing the opponent answered the outcome narration by conceding again.
     ; The alias (the NPC's protection) stays filled until step 4.
-    StorageUtil.UnsetIntValue(None, "SNDuel_Active")
-    StorageUtil.UnsetStringValue(None, "SNDuel_Status")
+    StorageUtil.UnsetIntValue(None, "TTY_Active")
+    StorageUtil.UnsetStringValue(None, "TTY_Status")
     if npc
-        StorageUtil.UnsetIntValue(npc, "SNDuel_Opponent")
+        StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
     endif
     if PlayerAliasScript
         PlayerAliasScript.StopWatching()
@@ -354,7 +354,7 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
         OpponentAlias.Clear()
     endif
     if npc
-        StorageUtil.UnsetIntValue(npc, "SNDuel_Opponent")
+        StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
     endif
     opponent = None
     opponentWasTeammate = false
@@ -430,9 +430,9 @@ string Function Outcome(Actor akNpc, Actor akWinner, Actor akLoser, string asHow
 EndFunction
 
 Function RestorePlayerEssential()
-    if StorageUtil.GetIntValue(None, "SNDuel_SetPlayerEssential", 0) == 1
+    if StorageUtil.GetIntValue(None, "TTY_SetPlayerEssential", 0) == 1
         Game.GetPlayer().GetActorBase().SetEssential(false)
-        StorageUtil.UnsetIntValue(None, "SNDuel_SetPlayerEssential")
+        StorageUtil.UnsetIntValue(None, "TTY_SetPlayerEssential")
     endif
 EndFunction
 
@@ -443,7 +443,7 @@ Function Reset()
         Actor npc = OpponentAlias.GetActorReference()
         if npc
             npc.StopCombat()
-            StorageUtil.UnsetIntValue(npc, "SNDuel_Opponent")
+            StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
             if opponentWasTeammate
                 npc.SetPlayerTeammate(true)
             endif
@@ -453,8 +453,8 @@ Function Reset()
     if PlayerAliasScript
         PlayerAliasScript.StopWatching()
     endif
-    StorageUtil.UnsetIntValue(None, "SNDuel_Active")
-    StorageUtil.UnsetStringValue(None, "SNDuel_Status")
+    StorageUtil.UnsetIntValue(None, "TTY_Active")
+    StorageUtil.UnsetStringValue(None, "TTY_Status")
     RestorePlayerEssential()
     opponent = None
     opponentWasTeammate = false

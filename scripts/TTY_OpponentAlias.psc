@@ -1,10 +1,10 @@
-Scriptname SNDuel_OpponentAlias extends ReferenceAlias
-{On the Opponent alias of SNDuel_Quest. The alias's Essential flag is what keeps the NPC alive;
+Scriptname TTY_OpponentAlias extends ReferenceAlias
+{On the Opponent alias of TTY_Quest. The alias's Essential flag is what keeps the NPC alive;
  this script reports when they go down and when someone outside the duel hits them.
- SNDuel_Main ignores both unless a duel is being fought.}
+ TTY_Main ignores both unless a duel is being fought.}
 
 Event OnEnterBleedout()
-    SNDuel_Main main = GetOwningQuest() as SNDuel_Main
+    TTY_Main main = GetOwningQuest() as TTY_Main
     if main
         main.OnOpponentDown()
     endif
@@ -16,8 +16,8 @@ Event OnHit(ObjectReference akAggressor, Form akSource, Projectile akProjectile,
     if !attacker || attacker == Game.GetPlayer()
         return
     endif
-    ; The cast is None if SNDuel_Main failed to load. Checked, so OnHit cannot spam the log.
-    SNDuel_Main main = GetOwningQuest() as SNDuel_Main
+    ; The cast is None if TTY_Main failed to load. Checked, so OnHit cannot spam the log.
+    TTY_Main main = GetOwningQuest() as TTY_Main
     if main
         main.OnOutsideAttack(attacker)
     endif

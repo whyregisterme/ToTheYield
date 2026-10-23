@@ -1,4 +1,4 @@
-# Starts a duel between the speaker and the player: SNDuel_Main.BeginDuel on quest SNDuel_Quest.
+# Starts a duel between the speaker and the player: TTY_Main.BeginDuel on quest TTY_Quest.
 # The player confirms in a message box before anything happens, so a misfire costs one click.
 name: BeginDuel
 description: >-
@@ -7,8 +7,8 @@ description: >-
   {{ player.name }}: they challenged you and you accept, or you challenged them and they said yes.
   Never use it for an ordinary fight, an ambush, or before {{ player.name }} has agreed.
 
-questEditorId: SNDuel_Quest
-scriptName: SNDuel_Main
+questEditorId: TTY_Quest
+scriptName: TTY_Main
 executionFunctionName: BeginDuel
 
 # Function BeginDuel(Actor akSpeaker)
@@ -22,9 +22,9 @@ eligibilityRules:
         arguments: ["currentActor"]
         comparisonOperator: "=="
         expectedValue: false
-      # SNDuel_Active is set by SNDuel_Main while a duel is being fought.
+      # TTY_Active is set by TTY_Main while a duel is being fought.
       - decoratorName: papyrus_util
-        arguments: ["GetIntValue", "none", "SNDuel_Active", 0]
+        arguments: ["GetIntValue", "none", "TTY_Active", 0]
         comparisonOperator: "=="
         expectedValue: 0
     logicalOperator: AND

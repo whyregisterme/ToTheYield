@@ -1,6 +1,6 @@
 """Checks a built release zip before it ships. Exits 1 and lists every problem it finds.
 
-    python verify_release.py dist/SkyrimNetDuels-<version>.zip <layer id> <version> [forbidden word ...]
+    python verify_release.py dist/ToTheYield-<version>.zip <layer id> <version> [forbidden word ...]
 
 Reads the zip's raw central directory, not zipfile's view of it: on Windows zipfile turns
 backslashes into slashes when it reads, so it would hide the one defect it most needs to catch.
@@ -38,10 +38,10 @@ if len(z.namelist()) != len(raw_names):
 external = 'SKSE/Plugins/SkyrimNet/external/'
 layer = external + layer_id + '/'
 expected = [
-    'SkyrimNetDuels.esp',
-    'Scripts/SNDuel_Main.pex',
-    'Scripts/SNDuel_PlayerAlias.pex',
-    'Scripts/SNDuel_OpponentAlias.pex',
+    'ToTheYield.esp',
+    'Scripts/TTY_Main.pex',
+    'Scripts/TTY_PlayerAlias.pex',
+    'Scripts/TTY_OpponentAlias.pex',
     layer + 'manifest.json',
     layer + 'actions/BeginDuel.yaml',
     layer + 'actions/YieldDuel.yaml',

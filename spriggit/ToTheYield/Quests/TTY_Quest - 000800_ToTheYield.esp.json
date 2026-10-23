@@ -1,10 +1,10 @@
 {
-  "FormKey": "000800:SkyrimNetDuels.esp",
-  "EditorID": "SNDuel_Quest",
+  "FormKey": "000800:ToTheYield.esp",
+  "EditorID": "TTY_Quest",
   "VirtualMachineAdapter": {
     "Scripts": [
       {
-        "Name": "SNDuel_Main",
+        "Name": "TTY_Main",
         "Properties": [
           {
             "MutagenObjectType": "ScriptObjectProperty",
@@ -14,24 +14,24 @@
           {
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "ConfirmMsg",
-            "Object": "000801:SkyrimNetDuels.esp"
+            "Object": "000801:ToTheYield.esp"
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "OpponentAlias",
-            "Object": "000800:SkyrimNetDuels.esp",
+            "Object": "000800:ToTheYield.esp",
             "Alias": 1
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "PlayerAliasScript",
-            "Object": "000800:SkyrimNetDuels.esp",
+            "Object": "000800:ToTheYield.esp",
             "Alias": 0
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "UseBrawlFaction",
-            "Object": "000802:SkyrimNetDuels.esp"
+            "Object": "000802:ToTheYield.esp"
           }
         ]
       }
@@ -41,24 +41,24 @@
       {
         "Property": {
           "Name": "",
-          "Object": "000800:SkyrimNetDuels.esp",
+          "Object": "000800:ToTheYield.esp",
           "Alias": 0
         },
         "Scripts": [
           {
-            "Name": "SNDuel_PlayerAlias"
+            "Name": "TTY_PlayerAlias"
           }
         ]
       },
       {
         "Property": {
           "Name": "",
-          "Object": "000800:SkyrimNetDuels.esp",
+          "Object": "000800:ToTheYield.esp",
           "Alias": 1
         },
         "Scripts": [
           {
-            "Name": "SNDuel_OpponentAlias"
+            "Name": "TTY_OpponentAlias"
           }
         ]
       }
@@ -66,7 +66,7 @@
   },
   "Name": {
     "TargetLanguage": "English",
-    "Value": "SkyrimNet Duels"
+    "Value": "To the Yield"
   },
   "Flags": [
     "StartGameEnabled"

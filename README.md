@@ -1,4 +1,4 @@
-# SkyrimNet Duels
+# To the Yield
 
 A SkyrimNet add-on for formal duels: real weapons, fought until one side yields or goes down.
 Nobody dies.
@@ -14,8 +14,8 @@ When it ends, SkyrimNet hears how it went, so the NPC (and anyone watching) reme
 
 ## Install
 
-Download `SkyrimNetDuels-<version>.zip` from [Releases](../../releases) and install it with your mod
-manager (Vortex or MO2). Enable `SkyrimNetDuels.esp`. It's ESL-flagged, so it takes no load-order slot.
+Download `ToTheYield-<version>.zip` from [Releases](../../releases) and install it with your mod
+manager (Vortex or MO2). Enable `ToTheYield.esp`. It's ESL-flagged, so it takes no load-order slot.
 
 Updating: replace the old version rather than installing alongside it.
 
@@ -38,20 +38,20 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 
 ## Console levers
 
-- `set SNDuel_UseBrawlFaction to 1`: also puts both fighters in the vanilla brawl faction, in case
+- `set TTY_UseBrawlFaction to 1`: also puts both fighters in the vanilla brawl faction, in case
   guards or bystanders keep joining in. Default 0, because other mods' brawls use the same faction.
-- If a duel ever gets stuck: `stopquest SNDuel_Quest`, then `startquest SNDuel_Quest`. If you're
+- If a duel ever gets stuck: `stopquest TTY_Quest`, then `startquest TTY_Quest`. If you're
   still unkillable afterwards: `setessential 7 0`.
 
 ## How it works
 
 | Path | What |
 |---|---|
-| `scripts/SNDuel_Main.psc` | The duel: start, watch, end, clean up. Its header lists the StorageUtil keys |
-| `scripts/SNDuel_PlayerAlias.psc` | Cleanup after a reload; outside attackers on the player |
-| `scripts/SNDuel_OpponentAlias.psc` | Opponent went down, or was hit by an outsider |
-| `spriggit/SkyrimNetDuels/` | The plugin as Spriggit JSON: a quest (Player and Essential Opponent aliases), the confirm box, one global |
-| `layer/whyregister.skyrimnet-duels/` | The SkyrimNet layer: `BeginDuel` and `YieldDuel` actions, and a prompt that only renders mid-duel |
+| `scripts/TTY_Main.psc` | The duel: start, watch, end, clean up. Its header lists the StorageUtil keys |
+| `scripts/TTY_PlayerAlias.psc` | Cleanup after a reload; outside attackers on the player |
+| `scripts/TTY_OpponentAlias.psc` | Opponent went down, or was hit by an outsider |
+| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: a quest (Player and Essential Opponent aliases), the confirm box, one global |
+| `layer/whyregister.to-the-yield/` | The SkyrimNet layer: `BeginDuel` and `YieldDuel` actions, and a prompt that only renders mid-duel |
 
 - Protection: the NPC sits in an Essential quest alias, so they go into bleedout instead of dying.
   The player is set essential only for the duel. The vanilla brawl faction alone does **not** stop
@@ -64,7 +64,7 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 `build.sh` (Git Bash on Windows) compiles the scripts with Caprica, builds the `.esp` from the
 Spriggit source, round-trips it back to JSON to catch dropped fields, and zips the result into
 `dist/`. It expects to sit two folders below a tools folder inside the game directory
-(`<Skyrim>/Tools/projects/SkyrimNetDuels`), with Caprica and Spriggit in that tools folder, Python 3
+(`<Skyrim>/Tools/projects/ToTheYield`), with Caprica and Spriggit in that tools folder, Python 3
 on PATH, and the game's Papyrus sources (vanilla, SKSE, PapyrusUtil, Papyrus Extender, SkyrimNet)
 installed. It only reads the game folder.
 

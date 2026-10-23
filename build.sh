@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds SkyrimNet Duels into dist/SkyrimNetDuels-<version>.zip, a mod you install with Vortex.
+# Builds To the Yield into dist/ToTheYield-<version>.zip, a mod you install with Vortex.
 #
 #   bash build.sh
 #
@@ -14,9 +14,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TOOLS="$(cd "$HERE/../.." && pwd)"
-VERSION="$(python -c "import json;print(json.load(open(r'$(cygpath -w "$HERE/layer/whyregister.skyrimnet-duels/manifest.json")'))['version'])")"
-NAME="SkyrimNetDuels"
-LAYER_ID="whyregister.skyrimnet-duels"
+VERSION="$(python -c "import json;print(json.load(open(r'$(cygpath -w "$HERE/layer/whyregister.to-the-yield/manifest.json")'))['version'])")"
+NAME="ToTheYield"
+LAYER_ID="whyregister.to-the-yield"
 
 BUILD="$HERE/build"
 STAGE="$BUILD/stage"
@@ -114,4 +114,6 @@ EOF
 ls -la "$ZIP"
 
 echo "== 6/6 release check"
-python "$(cygpath -w "$HERE/verify_release.py")" "$(cygpath -w "$ZIP")" "$LAYER_ID" "$VERSION" "$USERNAME" "$COMPUTERNAME" "SteamLibrary"
+# Forbidden in any shipped file: identifying strings, and the old name, which must never ship again.
+python "$(cygpath -w "$HERE/verify_release.py")" "$(cygpath -w "$ZIP")" "$LAYER_ID" "$VERSION" "$USERNAME" "$COMPUTERNAME" "SteamLibrary" \
+    "SNDuel" "SkyrimNetDuels" "skyrimnet-duels" "SkyrimNet Duels"
