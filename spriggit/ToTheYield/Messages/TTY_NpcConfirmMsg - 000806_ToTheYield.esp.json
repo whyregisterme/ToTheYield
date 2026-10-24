@@ -1,0 +1,33 @@
+{
+  "FormKey": "000806:ToTheYield.esp",
+  "EditorID": "TTY_NpcConfirmMsg",
+  "Description": {
+    "TargetLanguage": "English",
+    "Value": "Two of them are about to fight a duel: real weapons, until one of them yields or goes down. Nobody dies."
+  },
+  "INAM": "0x00000000",
+  "Quest": "000805:ToTheYield.esp",
+  "Flags": [
+    "MessageBox"
+  ],
+  "MenuButtons": [
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Allow"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Stop it"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Stop it silently"
+      }
+    }
+  ]
+}

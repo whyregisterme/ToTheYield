@@ -3,7 +3,7 @@
   "EditorID": "TTY_ConfirmMsg",
   "Description": {
     "TargetLanguage": "English",
-    "Value": "<Alias=Opponent> offers you a duel: real weapons, fought until one of you yields or goes down. Nobody dies.\n\nSheathe your weapon to yield."
+    "Value": "You've been offered a duel: real weapons, fought until one of you yields or goes down. Nobody dies.\n\nSheathe your weapon to yield."
   },
   "INAM": "0x00000000",
   "Quest": "000800:ToTheYield.esp",

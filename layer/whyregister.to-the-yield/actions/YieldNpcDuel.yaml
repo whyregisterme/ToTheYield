@@ -1,0 +1,26 @@
+# A duelist in an NPC duel concedes: TTY_NpcDuel.YieldNpcDuel on quest TTY_NpcDuelQuest.
+name: YieldNpcDuel
+description: >-
+  Concede the duel you are fighting: lower your weapon and admit defeat. Use it when you are
+  badly hurt, clearly outmatched, or have seen enough to respect your opponent.
+
+questEditorId: TTY_NpcDuelQuest
+scriptName: TTY_NpcDuel
+executionFunctionName: YieldNpcDuel
+
+# Function YieldNpcDuel(Actor akSpeaker)
+parameterMapping:
+  - type: speaker
+
+eligibilityRules:
+  - conditions:
+      # TTY_NpcDuelist is 1 on an NPC only while they are fighting an NPC duel.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "TTY_NpcDuelist", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: AND
+    required: true
+
+eventString: "{{ actor_name }} conceded the duel."
+defaultPriority: 6

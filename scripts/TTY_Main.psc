@@ -29,8 +29,8 @@ TTY_PlayerAlias Property PlayerAliasScript Auto
 {The PlayerAlias, which notices outside attackers while a duel runs and calls OnGameLoad.}
 
 Message Property ConfirmMsg Auto
-{"<Alias=Opponent> offers you a duel..." with Fight / Refuse / Refuse silently. Owned by this quest, which is what
- lets the <Alias=Opponent> tag resolve to the NPC's name.}
+{"You've been offered a duel..." with Fight / Refuse / Refuse silently. The box names nobody: an <Alias=Opponent>
+ tag printed "[...]" in game even with the alias filled, so a notification names the opponent just before it.}
 
 Faction Property BrawlFaction Auto
 {Skyrim.esm DGIntimidateFaction (0x04CFA6), the faction vanilla brawls use. Only used while
@@ -39,6 +39,14 @@ Faction Property BrawlFaction Auto
 GlobalVariable Property UseBrawlFaction Auto
 {TTY_UseBrawlFaction, default 0. 1 also puts both fighters in the vanilla brawl faction, which may
  keep guards and bystanders out of it. Console: set TTY_UseBrawlFaction to 1}
+
+GlobalVariable Property BystanderGuard Auto
+{TTY_BystanderGuard: 1 while a duel is fought. TTY_BystanderGhostAbility (given to NPCs by SPID,
+ ToTheYield_DISTR.ini) turns bystanders near the player ghost while it is 1, so stray blows pass
+ through them. Without SPID nothing reads it.}
+
+Faction Property DuelistFaction Auto
+{TTY_DuelistFaction: the duelists, whom the ghost ability leaves alone.}
 
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.25 AutoReadOnly
@@ -85,7 +93,7 @@ Function BeginDuel(Actor akSpeaker)
         return
     endif
 
-    ; Fill the alias before the box: the box names the opponent through <Alias=Opponent>.
+    Debug.Notification(akSpeaker.GetDisplayName() + " offers you a duel")
     ; Buttons, in ConfirmMsg's order: 0 Fight, 1 Refuse, 2 Refuse silently (SeverActions' convention).
     OpponentAlias.ForceRefTo(akSpeaker)
     int choice = ConfirmMsg.Show()
@@ -141,6 +149,7 @@ Function OnGameLoad()
     elseif GetState() == ""
         ; A crash or a quit mid-duel never reaches FinishDuel. Undo what it would have undone.
         RestorePlayerEssential()
+        GuardOff(None, None)
         RestoreRanks()
     endif
 EndFunction
@@ -152,7 +161,8 @@ EndFunction
 ; Why akNpc cannot duel right now, or "" if they can.
 string Function CannotDuelReason(Actor akNpc)
     Actor player = Game.GetPlayer()
-    if GetState() != ""
+    if GetState() != "" || StorageUtil.GetIntValue(None, "TTY_NpcDuelActive", 0) == 1
+        ; One duel of any kind at a time (TTY_NpcDuel runs the NPC-against-NPC ones).
         return "a duel is already under way"
     elseif !akNpc || akNpc == player || akNpc.IsDead()
         return "no opponent"
@@ -207,6 +217,8 @@ Function StartFight(Actor akNpc)
         akNpc.AddToFaction(BrawlFaction)
         player.AddToFaction(BrawlFaction)
     endif
+
+    GuardOn(akNpc, None)
 
     string names = akNpc.GetDisplayName() + " and " + player.GetDisplayName()
     StorageUtil.SetIntValue(None, "TTY_Active", 1)
@@ -335,6 +347,7 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     ;    straight back up when combat was stopped only once.
     ; npc is None if the opponent was deleted mid-duel ("broken"): every use below checks it.
     StopTheFight(npc, calmPlayer)
+    GuardOff(npc, None)
     if brawlFactionUsed
         if npc
             npc.RemoveFromFaction(BrawlFaction)
@@ -498,6 +511,34 @@ Function RestoreRanks()
     StorageUtil.UnsetIntValue(None, "TTY_RankPlayerToNpc")
 EndFunction
 
+; The ghost ability's switch (see BystanderGuard). Duelists are marked so they stay solid.
+Function GuardOn(Actor akA, Actor akB)
+    if !BystanderGuard || !DuelistFaction
+        return
+    endif
+    if akA
+        akA.AddToFaction(DuelistFaction)
+    endif
+    if akB
+        akB.AddToFaction(DuelistFaction)
+    endif
+    BystanderGuard.SetValue(1)
+EndFunction
+
+Function GuardOff(Actor akA, Actor akB)
+    if BystanderGuard
+        BystanderGuard.SetValue(0)
+    endif
+    if DuelistFaction
+        if akA
+            akA.RemoveFromFaction(DuelistFaction)
+        endif
+        if akB
+            akB.RemoveFromFaction(DuelistFaction)
+        endif
+    endif
+EndFunction
+
 ; Puts everything back, from any state. Runs on first start and when the quest is restarted.
 Function Reset()
     UnregisterForUpdate()
@@ -506,6 +547,7 @@ Function Reset()
         if npc
             npc.StopCombat()
             StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
+            GuardOff(npc, None)
             if brawlFactionUsed
                 npc.RemoveFromFaction(BrawlFaction)
             endif
@@ -520,6 +562,7 @@ Function Reset()
     endif
     StorageUtil.UnsetIntValue(None, "TTY_Active")
     StorageUtil.UnsetStringValue(None, "TTY_Status")
+    GuardOff(None, None)
     RestorePlayerEssential()
     RestoreRanks()
     opponent = None

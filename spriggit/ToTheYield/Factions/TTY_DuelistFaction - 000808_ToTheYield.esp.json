@@ -1,0 +1,9 @@
+{
+  "FormKey": "000808:ToTheYield.esp",
+  "EditorID": "TTY_DuelistFaction",
+  "Flags": [
+    "HiddenFromPC"
+  ],
+  "CrimeValues": {},
+  "VendorValues": {}
+}

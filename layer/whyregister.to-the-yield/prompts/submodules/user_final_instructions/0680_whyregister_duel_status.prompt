@@ -13,4 +13,21 @@
 - {{ duel }} You are watching, not fighting: a short cheer, wince or remark at most, and do not join in.
 {% endif %}
 {% endif %}
+{#
+  NPC against NPC (TTY_NpcDuel). A challenge waiting on this NPC's answer comes first.
+#}
+{% if papyrus_util("GetIntValue", npc.UUID, "TTY_NpcChallenged", 0) == 1 %}
+- ANSWER REQUIRED: {{ papyrus_util("GetStringValue", npc.UUID, "TTY_NpcChallengerName", "someone") }} has just challenged you to a formal duel: real weapons, to the yield, nobody dies. Answer now, in your own words: accept (AcceptDuel) or refuse (DeclineDuel).
+{% endif %}
+{#
+  TTY_NpcStatus is set only while an NPC duel is being fought.
+#}
+{% set npcduel = papyrus_util("GetStringValue", "none", "TTY_NpcStatus", "") %}
+{% if npcduel != "" %}
+{% if papyrus_util("GetIntValue", npc.UUID, "TTY_NpcDuelist", 0) == 1 %}
+- You are fighting a formal duel with {{ papyrus_util("GetStringValue", npc.UUID, "TTY_NpcDuelFoe", "your opponent") }} right now: real weapons, to the yield. Nobody is meant to die, whatever your wounds say. Keep words short, the way people talk mid-fight. If you are losing badly, yielding is no shame.
+{% else %}
+- {{ npcduel }} You are watching, not fighting: a short cheer, wince or remark at most, and do not join in.
+{% endif %}
+{% endif %}
 {% endif %}

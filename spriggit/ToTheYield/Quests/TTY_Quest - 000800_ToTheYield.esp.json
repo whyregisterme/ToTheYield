@@ -13,8 +13,18 @@
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "BystanderGuard",
+            "Object": "000807:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
             "Name": "ConfirmMsg",
             "Object": "000801:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "DuelistFaction",
+            "Object": "000808:ToTheYield.esp"
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",

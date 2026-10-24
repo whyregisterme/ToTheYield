@@ -30,6 +30,11 @@ eligibilityRules:
         arguments: ["currentActor", "CurrentFollowerFaction"]
         comparisonOperator: "<"
         expectedValue: 0
+      # One duel of any kind at a time: not while an NPC duel (TTY_NpcDuel) is being fought.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_NpcDuelActive", 0]
+        comparisonOperator: "=="
+        expectedValue: 0
       # TTY_Active is set by TTY_Main while a duel is being fought.
       - decoratorName: papyrus_util
         arguments: ["GetIntValue", "none", "TTY_Active", 0]

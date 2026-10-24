@@ -1,0 +1,123 @@
+{
+  "FormKey": "000805:ToTheYield.esp",
+  "EditorID": "TTY_NpcDuelQuest",
+  "VirtualMachineAdapter": {
+    "Scripts": [
+      {
+        "Name": "TTY_NpcDuel",
+        "Properties": [
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "BrawlFaction",
+            "Object": "04CFA6:Skyrim.esm"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "BystanderGuard",
+            "Object": "000807:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "DuelistA",
+            "Object": "000805:ToTheYield.esp",
+            "Alias": 1
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "DuelistB",
+            "Object": "000805:ToTheYield.esp",
+            "Alias": 2
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "DuelistFaction",
+            "Object": "000808:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "NpcConfirmMsg",
+            "Object": "000806:ToTheYield.esp"
+          }
+        ]
+      }
+    ],
+    "FileName": "",
+    "Aliases": [
+      {
+        "Property": {
+          "Name": "",
+          "Object": "000805:ToTheYield.esp",
+          "Alias": 0
+        },
+        "Scripts": [
+          {
+            "Name": "TTY_NpcPlayerAlias"
+          }
+        ]
+      },
+      {
+        "Property": {
+          "Name": "",
+          "Object": "000805:ToTheYield.esp",
+          "Alias": 1
+        },
+        "Scripts": [
+          {
+            "Name": "TTY_NpcDuelistAlias"
+          }
+        ]
+      },
+      {
+        "Property": {
+          "Name": "",
+          "Object": "000805:ToTheYield.esp",
+          "Alias": 2
+        },
+        "Scripts": [
+          {
+            "Name": "TTY_NpcDuelistAlias"
+          }
+        ]
+      }
+    ]
+  },
+  "Name": {
+    "TargetLanguage": "English",
+    "Value": "To the Yield: NPC duels"
+  },
+  "Flags": [
+    "StartGameEnabled"
+  ],
+  "Priority": 50,
+  "NextAliasID": 3,
+  "Aliases": [
+    {
+      "Name": "PlayerAlias",
+      "Flags": [
+        "AllowReuseInQuest"
+      ],
+      "UniqueActor": "000007:Skyrim.esm",
+      "VoiceTypes": "Null"
+    },
+    {
+      "ID": 1,
+      "Name": "DuelistA",
+      "Flags": [
+        "Optional",
+        "AllowReuseInQuest",
+        "Essential"
+      ],
+      "VoiceTypes": "Null"
+    },
+    {
+      "ID": 2,
+      "Name": "DuelistB",
+      "Flags": [
+        "Optional",
+        "AllowReuseInQuest",
+        "Essential"
+      ],
+      "VoiceTypes": "Null"
+    }
+  ]
+}

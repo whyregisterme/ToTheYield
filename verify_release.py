@@ -42,9 +42,18 @@ expected = [
     'Scripts/TTY_Main.pex',
     'Scripts/TTY_PlayerAlias.pex',
     'Scripts/TTY_OpponentAlias.pex',
+    'Scripts/TTY_NpcDuel.pex',
+    'Scripts/TTY_NpcDuelistAlias.pex',
+    'Scripts/TTY_NpcPlayerAlias.pex',
+    'Scripts/TTY_BystanderGhostEffect.pex',
+    'ToTheYield_DISTR.ini',
     layer + 'manifest.json',
     layer + 'actions/BeginDuel.yaml',
     layer + 'actions/YieldDuel.yaml',
+    layer + 'actions/ChallengeDuel.yaml',
+    layer + 'actions/AcceptDuel.yaml',
+    layer + 'actions/DeclineDuel.yaml',
+    layer + 'actions/YieldNpcDuel.yaml',
 ]
 for e in expected:
     if e not in names:

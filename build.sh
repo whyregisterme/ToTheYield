@@ -94,6 +94,8 @@ cp "$HERE"/scripts/*.psc "$STAGE/Source/Scripts/"
 cp -r "$HERE/layer/$LAYER_ID" "$STAGE/SKSE/Plugins/SkyrimNet/external/"
 # Named after the mod so it never collides with another mod's LICENSE in Data/.
 cp "$HERE/LICENSE" "$STAGE/$NAME-LICENSE.txt"
+# SPID reads <Plugin>_DISTR.ini from Data/. Without SPID installed the file is inert.
+cp "$HERE/${NAME}_DISTR.ini" "$STAGE/"
 (cd "$STAGE" && find . -type f | sort)
 
 echo "== 5/6 zip"

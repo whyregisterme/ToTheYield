@@ -1,0 +1,53 @@
+# One NPC challenges another to a duel: TTY_NpcDuel.ChallengeDuel on quest TTY_NpcDuelQuest.
+# Nothing starts until the target answers with AcceptDuel, and then the player confirms in a box.
+name: ChallengeDuel
+description: >-
+  Challenge someone present (not {{ player.name }}) to a formal duel: real weapons, fought until
+  one of you yields or goes down, and nobody dies. Use it when, in this line, you dare them to
+  settle something now (a grudge, an insult, a test of skill) and wait for their answer.
+  Not for teasing, boasts, or a fight proposed for later. To duel {{ player.name }}, use
+  BeginDuel instead.
+
+questEditorId: TTY_NpcDuelQuest
+scriptName: TTY_NpcDuel
+executionFunctionName: ChallengeDuel
+
+# Function ChallengeDuel(Actor akChallenger, Actor akTarget)
+parameterMapping:
+  - type: speaker
+  - type: dynamic
+    name: target
+    description: "exact name of the person being challenged, as listed in Nearby Actors"
+
+# Same group, distance, combat and children are checked in Papyrus (CannotDuelReason): SkyrimNet
+# decides eligibility before it knows the target, so a pair can only be refused there.
+eligibilityRules:
+  - conditions:
+      - decoratorName: is_in_combat
+        arguments: ["currentActor"]
+        comparisonOperator: "=="
+        expectedValue: false
+      # Followers are not tested in NPC duels yet. Rank, not is_in_faction: dismissed followers
+      # keep the faction at rank -1.
+      - decoratorName: get_faction_rank
+        arguments: ["currentActor", "CurrentFollowerFaction"]
+        comparisonOperator: "<"
+        expectedValue: 0
+      # One challenge at a time: hidden while one waits on an answer.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_NpcChallengePending", 0]
+        comparisonOperator: "=="
+        expectedValue: 0
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_NpcDuelActive", 0]
+        comparisonOperator: "=="
+        expectedValue: 0
+      # One duel of any kind at a time: not while the player is fighting one (TTY_Main).
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_Active", 0]
+        comparisonOperator: "=="
+        expectedValue: 0
+    logicalOperator: AND
+    required: true
+
+defaultPriority: 5

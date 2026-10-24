@@ -1,0 +1,30 @@
+# The challenged NPC accepts: TTY_NpcDuel.AcceptDuel. The player then allows or stops the duel.
+name: AcceptDuel
+description: >-
+  Accept the duel challenge that is waiting on your answer: real weapons, to the yield, and
+  nobody dies. Use it when you say yes in this line. To refuse, use DeclineDuel.
+
+questEditorId: TTY_NpcDuelQuest
+scriptName: TTY_NpcDuel
+executionFunctionName: AcceptDuel
+
+# Function AcceptDuel(Actor akAccepter)
+parameterMapping:
+  - type: speaker
+
+eligibilityRules:
+  - conditions:
+      # TTY_NpcChallenged is 1 on an NPC only while a challenge waits on their answer.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "TTY_NpcChallenged", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+      - decoratorName: is_in_combat
+        arguments: ["currentActor"]
+        comparisonOperator: "=="
+        expectedValue: false
+    logicalOperator: AND
+    required: true
+
+eventString: "{{ actor_name }} accepted the challenge to a duel."
+defaultPriority: 7

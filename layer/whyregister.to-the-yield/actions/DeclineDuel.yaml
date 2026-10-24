@@ -1,0 +1,23 @@
+# The challenged NPC refuses: TTY_NpcDuel.DeclineDuel.
+name: DeclineDuel
+description: >-
+  Refuse the duel challenge that is waiting on your answer. Use it when you say no in this line.
+
+questEditorId: TTY_NpcDuelQuest
+scriptName: TTY_NpcDuel
+executionFunctionName: DeclineDuel
+
+# Function DeclineDuel(Actor akDecliner)
+parameterMapping:
+  - type: speaker
+
+eligibilityRules:
+  - conditions:
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "TTY_NpcChallenged", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: AND
+    required: true
+
+defaultPriority: 7
