@@ -97,6 +97,9 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
   afterwards. The original is kept in the save, so a reload or quest restart always restores it.
 - Followers: the follower factions keep them from fighting you whatever their rank, and SeverActions'
   friendly-fire guard stops any fight with its companions. Dismissed, they duel like anyone else.
+- Courage: many civilians are Cowardly and run from any fight. For the duel, each duelist's
+  Confidence is raised to Foolhardy and put back afterwards (the original is kept in the save, like
+  the relationship rank). Tested live: two cowardly Dawnstar locals then fought it out.
 - NPC duels: both duelists join the vanilla brawl faction, which keeps fellow guards from piling in
   (without it, one joined within a second in testing).
 - Bystanders: the ability's conditions (a duel is on, within 600 units of you, not a duelist) are

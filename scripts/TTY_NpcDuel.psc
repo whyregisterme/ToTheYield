@@ -24,6 +24,8 @@ Scriptname TTY_NpcDuel extends Quest
      TTY_NpcStatus       string, global       one line about the duel, for spectators' prompts
      TTY_NpcDuelist      int, on each NPC     1 while that NPC is a duelist
      TTY_NpcDuelFoe      string, on each NPC  the other duelist's name, for the duelist's prompt
+     TTY_NpcBrave        form list, global    the duelists whose Confidence a duel raised
+     TTY_NpcConfidence   float, on each NPC   that duelist's base Confidence before the duel
 
  Stuck? From the console: stopquest TTY_NpcDuelQuest, then startquest TTY_NpcDuelQuest.}
 
@@ -222,6 +224,8 @@ string Function StartDuel(Actor akA, Actor akB)
     endif
 
     GuardOn(akA, akB)
+    Embolden(akA)
+    Embolden(akB)
 
     string a = akA.GetDisplayName()
     string b = akB.GetDisplayName()
@@ -294,6 +298,8 @@ Function OnGameLoad()
         ; The real-time clock restarted, so a waiting challenge can no longer lapse: drop it.
         ClearChallenge()
         GuardOff(None, None)
+        ; A crash or a quit mid-duel never reaches FinishDuel.
+        RestoreAllConfidence()
     endif
 EndFunction
 
@@ -409,6 +415,9 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
         Utility.Wait(1.0)
         waited += 1
     endwhile
+    ; Back to their own courage only now: put back earlier, a coward still in combat runs.
+    RestoreConfidence(a)
+    RestoreConfidence(b)
     DuelistA.Clear()
     DuelistB.Clear()
     duelA = None
@@ -441,6 +450,34 @@ Function ClearDuelistKeys(Actor akNpc)
         StorageUtil.UnsetIntValue(akNpc, "TTY_NpcDuelist")
         StorageUtil.UnsetStringValue(akNpc, "TTY_NpcDuelFoe")
     endif
+EndFunction
+
+; Many civilians are Cowardly (Confidence 0) and run from any fight, a duel included: tested live
+; 2026-10-25, Captain Wayfinder and Ravam Verethi both fled. Foolhardy (4) never flees. Confidence is
+; saved with the game, so each original goes in the co-save.
+Function Embolden(Actor akNpc)
+    if akNpc && StorageUtil.FormListFind(None, "TTY_NpcBrave", akNpc) < 0
+        StorageUtil.SetFloatValue(akNpc, "TTY_NpcConfidence", akNpc.GetBaseActorValue("Confidence"))
+        StorageUtil.FormListAdd(None, "TTY_NpcBrave", akNpc, false)
+        akNpc.SetActorValue("Confidence", 4.0)
+    endif
+EndFunction
+
+Function RestoreConfidence(Actor akNpc)
+    if akNpc && StorageUtil.FormListFind(None, "TTY_NpcBrave", akNpc) >= 0
+        akNpc.SetActorValue("Confidence", StorageUtil.GetFloatValue(akNpc, "TTY_NpcConfidence", 0.0))
+        StorageUtil.UnsetFloatValue(akNpc, "TTY_NpcConfidence")
+        StorageUtil.FormListRemove(None, "TTY_NpcBrave", akNpc, true)
+    endif
+EndFunction
+
+Function RestoreAllConfidence()
+    int i = StorageUtil.FormListCount(None, "TTY_NpcBrave")
+    while i > 0
+        i -= 1
+        RestoreConfidence(StorageUtil.FormListGet(None, "TTY_NpcBrave", i) as Actor)
+    endwhile
+    StorageUtil.FormListClear(None, "TTY_NpcBrave")
 EndFunction
 
 Function RecoverIfDown(Actor akNpc)
@@ -544,6 +581,7 @@ Function Reset()
     StorageUtil.UnsetIntValue(None, "TTY_NpcDuelActive")
     StorageUtil.UnsetStringValue(None, "TTY_NpcStatus")
     ClearChallenge()
+    RestoreAllConfidence()
     duelA = None
     duelB = None
     GoToState("")

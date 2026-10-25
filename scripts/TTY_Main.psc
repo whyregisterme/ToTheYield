@@ -18,6 +18,8 @@ Scriptname TTY_Main extends Quest
      TTY_RankNpc            form, global         the NPC whose relationship rank a duel lowered
      TTY_RankNpcToPlayer    int, global          that NPC's rank toward the player before the duel
      TTY_RankPlayerToNpc    int, global          the player's rank toward that NPC before the duel
+     TTY_BraveNpc           form, global         the NPC whose Confidence a duel raised
+     TTY_NpcConfidence      float, global        that NPC's base Confidence before the duel
 
  Stuck? From the console: stopquest TTY_Quest, then startquest TTY_Quest. OnInit runs again
  and Reset puts everything back. If you are still immortal after that: setessential 7 0}
@@ -151,6 +153,7 @@ Function OnGameLoad()
         RestorePlayerEssential()
         GuardOff(None, None)
         RestoreRanks()
+        RestoreConfidence()
     endif
 EndFunction
 
@@ -211,6 +214,7 @@ Function StartFight(Actor akNpc)
     ; dismissed follower (rank 3), 2026-10-23: with both ranks set to 0 they fought every sample of
     ; two 10 s runs; at rank 3 they never did. Neutral NPCs (guards) are at 0 already.
     LowerRanks(akNpc)
+    Embolden(akNpc)
 
     brawlFactionUsed = BrawlFaction && UseBrawlFaction && UseBrawlFaction.GetValue() > 0
     if brawlFactionUsed
@@ -390,6 +394,7 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     Utility.Wait(3.0)
     StopTheFight(npc, calmPlayer)
     RestoreRanks()
+    RestoreConfidence()
     RestorePlayerEssential()
     int waited = 0
     while npc && npc.IsBleedingOut() && waited < 10
@@ -483,6 +488,24 @@ Function RestorePlayerEssential()
     endif
 EndFunction
 
+; Many civilians are Cowardly (Confidence 0) and run from any fight, a duel included: tested live
+; 2026-10-25, Captain Wayfinder and Ravam Verethi both fled. Foolhardy (4) never flees. Confidence is
+; saved with the game, so the original goes in the co-save, as the ranks below do.
+Function Embolden(Actor akNpc)
+    StorageUtil.SetFormValue(None, "TTY_BraveNpc", akNpc)
+    StorageUtil.SetFloatValue(None, "TTY_NpcConfidence", akNpc.GetBaseActorValue("Confidence"))
+    akNpc.SetActorValue("Confidence", 4.0)
+EndFunction
+
+Function RestoreConfidence()
+    Actor npc = StorageUtil.GetFormValue(None, "TTY_BraveNpc") as Actor
+    if npc
+        npc.SetActorValue("Confidence", StorageUtil.GetFloatValue(None, "TTY_NpcConfidence", 0.0))
+    endif
+    StorageUtil.UnsetFormValue(None, "TTY_BraveNpc")
+    StorageUtil.UnsetFloatValue(None, "TTY_NpcConfidence")
+EndFunction
+
 ; Relationship ranks are saved with the game, so the originals go in the co-save: a reload, a
 ; crash or a quest restart can always put them back (OnGameLoad, Reset), like the essential flag.
 Function LowerRanks(Actor akNpc)
@@ -565,6 +588,7 @@ Function Reset()
     GuardOff(None, None)
     RestorePlayerEssential()
     RestoreRanks()
+    RestoreConfidence()
     opponent = None
     brawlFactionUsed = false
     GoToState("")
