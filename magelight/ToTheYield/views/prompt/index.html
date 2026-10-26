@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>To the Yield</title>
+<!--
+  The duel confirmations for To the Yield, on Magelight UI. One page, two cards, two scripts:
+    TTY_Main    calls window.ttyOffer(json)    {name}  and hears window.ttyDuelChoice("fight"|"refuse"|"quiet")
+    TTY_NpcDuel calls window.ttyNpcOffer(json) {a, b}  and hears window.ttyNpcChoice("allow"|"stop"|"quiet")
+  Each script registered its own listener, so an answer only reaches the one that asked.
+  Same look as Hours Well Spent's page. Fonts are the ones Windows ships, as SeverActions does, so
+  nothing is bundled.
+-->
+<style>
+  :root {
+    --ink: #ece6da;
+    --ink-strong: #f4efe5;
+    --ink-soft: #b3ab9d;
+    --ink-faint: #9b9486;
+    --card: #1c1a17;
+    --line: #3a342b;
+    --edge: #4a4236;
+    --edge-strong: #5a5143;
+    --accent: #c9a45c;
+    --serif: "Sitka Text", Cambria, "Palatino Linotype", Georgia, serif;
+    --serif-hero: "Sitka Banner", "Sitka Display", Cambria, "Palatino Linotype", Georgia, serif;
+    --sans: "Segoe UI", system-ui, sans-serif;
+  }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: rgba(10, 9, 8, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); color: var(--ink);
+  }
+  .card {
+    display: none; box-sizing: border-box; width: 560px; max-width: calc(100vw - 48px);
+    padding: 40px 46px 36px; background: var(--card); border: 1px solid var(--edge); border-radius: 4px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    flex-direction: column; gap: 22px;
+  }
+  .card.on { display: flex; }
+  .head { display: flex; flex-direction: column; gap: 10px; }
+  .kicker { margin: 0; font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.22em; color: var(--accent); }
+  h1 { margin: 0; font-family: var(--serif-hero); font-size: 30px; font-weight: 400; line-height: 1.25; color: var(--ink-strong); }
+  .rule { height: 1px; background: var(--line); }
+  .terms { margin: 0; font-size: 21px; line-height: 1.5; }
+  .meta { margin: 0; font-size: 17px; color: var(--ink-soft); }
+  .note { margin: 0; font-size: 15px; line-height: 1.4; color: var(--ink-faint); }
+  .buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .row { display: flex; gap: 10px; }
+  button {
+    height: 46px; border-radius: 3px; font-family: var(--sans); font-size: 15px; letter-spacing: 0.02em;
+    cursor: pointer; background: transparent; color: var(--ink); border: 1px solid var(--edge-strong);
+  }
+  .row button { flex: 1 1 0; }
+  button.primary { height: 48px; border: none; background: var(--accent); color: var(--card); font-size: 16px; font-weight: 600; }
+  button.quiet { color: var(--ink-soft); border-color: var(--line); }
+  button:hover { border-color: var(--accent); }
+  button.primary:hover { background: #d8b673; }
+  button:focus { outline: 2px solid var(--ink-strong); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<section class="card" id="offer" aria-labelledby="offerTitle">
+  <div class="head">
+    <p class="kicker">TO THE YIELD</p>
+    <h1 id="offerTitle"></h1>
+  </div>
+  <div class="rule" aria-hidden="true"></div>
+  <p class="terms">Real weapons, fought until one of you yields or goes down. Nobody dies.</p>
+  <p class="meta">Sheathe your weapon to yield.</p>
+  <div class="buttons">
+    <button type="button" class="primary" id="fight" data-choice="fight" data-ml-sound="ok">Fight</button>
+    <div class="row">
+      <button type="button" data-choice="refuse" data-ml-sound="cancel">Refuse</button>
+      <button type="button" class="quiet" data-choice="quiet" data-ml-sound="cancel">Refuse silently</button>
+    </div>
+  </div>
+  <p class="note" id="offerNote"></p>
+</section>
+
+<section class="card" id="npc" aria-labelledby="npcTitle">
+  <div class="head">
+    <p class="kicker">TO THE YIELD</p>
+    <h1 id="npcTitle"></h1>
+  </div>
+  <div class="rule" aria-hidden="true"></div>
+  <p class="terms">Real weapons, until one of them yields or goes down. Nobody dies.</p>
+  <div class="buttons">
+    <button type="button" class="primary" id="allow" data-choice="allow" data-ml-sound="ok">Allow</button>
+    <div class="row">
+      <button type="button" data-choice="stop" data-ml-sound="cancel">Stop it</button>
+      <button type="button" class="quiet" data-choice="quiet" data-ml-sound="cancel">Stop it silently</button>
+    </div>
+  </div>
+  <p class="note">&ldquo;Stop it&rdquo; has you step between them, and they&rsquo;ll remember it. &ldquo;Silently&rdquo; doesn&rsquo;t.</p>
+</section>
+
+<script>
+(function () {
+  function parse(arg) {
+    if (typeof arg === 'string') {
+      try { return JSON.parse(arg); } catch (e) { return {}; }
+    }
+    return arg || {};
+  }
+  function text(id, value) { document.getElementById(id).textContent = value || ''; }
+  // Which card is up, and so which script's listener its answer goes to.
+  var LISTENER = { offer: 'ttyDuelChoice', npc: 'ttyNpcChoice' };
+  var current = '';
+  var answered = false;
+  function show(id, focusId) {
+    current = id;
+    answered = false;
+    document.getElementById('offer').classList.toggle('on', id === 'offer');
+    document.getElementById('npc').classList.toggle('on', id === 'npc');
+    var f = document.getElementById(focusId);
+    if (f) { f.focus(); }
+  }
+
+  // {name}
+  window.ttyOffer = function (arg) {
+    var d = parse(arg);
+    var name = d.name || 'Your opponent';
+    text('offerTitle', name + ' offers you a duel');
+    text('offerNote', '“Refuse” tells ' + name + ' you turned them down. “Silently” doesn’t.');
+    show('offer', 'fight');
+  };
+
+  // {a, b}
+  window.ttyNpcOffer = function (arg) {
+    var d = parse(arg);
+    text('npcTitle', (d.a || 'Two of them') + ' and ' + (d.b || 'another') + ' are about to fight a duel');
+    show('npc', 'allow');
+  };
+
+  function answer(choice) {
+    if (answered || !current) { return; }
+    answered = true;
+    var fn = window[LISTENER[current]];
+    current = '';
+    document.getElementById('offer').classList.remove('on');
+    document.getElementById('npc').classList.remove('on');
+    if (typeof fn === 'function') { fn(choice); }
+  }
+
+  var buttons = document.querySelectorAll('button[data-choice]');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener('click', function () { answer(this.getAttribute('data-choice')); });
+  }
+
+  // Keys are handled here rather than trusted to the engine: Ultralight has skipped DOM events before
+  // (Political Engine's map never got contextmenu), and SeverActions' prompts listen for keys themselves.
+  // Enter presses the focused button; Escape is the silent no. Magelight may also leave UI mode on
+  // Escape; the scripts count only the first answer.
+  document.addEventListener('keydown', function (e) {
+    if (!current) { return; }
+    if (e.key === 'Enter' || e.keyCode === 13) {
+      var f = document.activeElement;
+      if (f && f.getAttribute && f.getAttribute('data-choice')) {
+        e.preventDefault();
+        answer(f.getAttribute('data-choice'));
+      }
+    } else if (e.key === 'Escape' || e.keyCode === 27) {
+      e.preventDefault();
+      answer('quiet');
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "modId": "ToTheYield",
+  "name": "To the Yield",
+  "version": "0.4.0",
+  "minHost": "1.3.0",
+  "views": {
+    "prompt": {
+      "path": "views/prompt/index.html",
+      "layer": "popup",
+      "fullscreen": true,
+      "startVisible": false,
+      "sounds": {
+        "open": "open",
+        "close": "close"
+      }
+    }
+  }
+}

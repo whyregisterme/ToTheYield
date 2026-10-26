@@ -37,6 +37,11 @@
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "NpcConfirmMsg",
             "Object": "000806:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "UseMagelight",
+            "Object": "00080C:ToTheYield.esp"
           }
         ]
       }

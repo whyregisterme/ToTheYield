@@ -14,6 +14,8 @@ the duelists (and anyone watching) remember who won.
 - powerofthree's Papyrus Extender
 - Optional: Spell Perk Item Distributor (SPID), for bystander protection (see below). Without it
   everything else works; bystanders just aren't shielded from stray blows.
+- Optional: **Magelight UI 1.3.0 or newer** (SeverActions installs it too). With it, the
+  confirmations appear on a proper page that names who is involved; without it, as message boxes.
 
 ## Install
 
@@ -28,12 +30,14 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 
 ## Playing
 
-- **Starting a duel.** Ask an NPC to duel, or an NPC may challenge you. A box asks you to confirm:
+- **Starting a duel.** Ask an NPC to duel, or an NPC may challenge you. You're asked to confirm, on
+  the Magelight page if you have it, else in a box:
   - **Fight** starts the duel.
   - **Refuse** declines, and the NPC hears that you turned them down.
-  - **Refuse silently** declines without telling the NPC.
-- **No box, no duel.** The confirm box is the only sign a duel has really started and that you're both
-  protected. If an NPC agrees but no box appears, the duel didn't start: don't attack them, ask again.
+  - **Refuse silently** declines without telling the NPC (Escape does the same on the page).
+- **No confirmation, no duel.** The confirmation is the only sign a duel has really started and that
+  you're both protected. If an NPC agrees but nothing asks you, the duel didn't start: don't attack
+  them, ask again.
 - **Yielding.** Sheathe your weapon for about 4 seconds. The NPC can also concede on their own.
 - **Nobody dies.** Your opponent kneels when beaten. You drop at zero health and they stop attacking.
   Afterwards, whoever went down gets back up with some health.
@@ -48,10 +52,10 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 
 - **Challenges.** An NPC may challenge someone nearby to a duel. The challenged NPC accepts or
   declines in their own words. An unanswered challenge lapses after a minute.
-- **You decide.** When a challenge is accepted, a box asks you first:
+- **You decide.** When a challenge is accepted, you're asked first:
   - **Allow** lets the duel go ahead.
   - **Stop it** calls it off, and the two hear that you stopped it.
-  - **Stop it silently** calls it off without telling them.
+  - **Stop it silently** calls it off without telling them (Escape does the same on the page).
 - **The fight.** Same rules as yours: nobody dies, the loser kneels and yields, and either duelist
   can concede. It ends in a draw after 3 minutes, and is called off if the two drift far apart,
   never really fight, or someone else joins in.
@@ -68,8 +72,10 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 
 ## Console levers
 
-- `set TTY_UseBrawlFaction to 1`: also puts both fighters in the vanilla brawl faction, in case guards
-  or bystanders keep joining in. Default 0.
+- `set TTY_UseMagelight to 0`: always the message boxes, even with Magelight installed (say, on a
+  controller). Set it back to `1` and load a save to bring the page back.
+- `set TTY_UseBrawlFaction to 0`: keeps you and your opponent out of the vanilla brawl faction. Default
+  1. Without it, your opponent's friends (fellow guards, the Companions) join in on their side.
 - If a duel ever gets stuck: `stopquest TTY_Quest`, then `startquest TTY_Quest`. If you're
   still unkillable afterwards: `setessential 7 0`.
 - A stuck NPC duel: `stopquest TTY_NpcDuelQuest`, then `startquest TTY_NpcDuelQuest`.
@@ -85,8 +91,11 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 | `scripts/TTY_NpcDuel.psc` | NPC against NPC: challenge, accept, the fight, the end. Its header lists its StorageUtil keys |
 | `scripts/TTY_NpcDuelistAlias.psc`, `TTY_NpcPlayerAlias.psc` | A duelist went down or was hit; cleanup after a reload |
 | `scripts/TTY_BystanderGhostEffect.psc` | Turns a nearby bystander ghost for the length of a duel |
+| `scripts/TTY_UI.psc` | Every Magelight UI call, behind a check that Magelight is installed, new enough and ready |
+| `magelight/ToTheYield/` | The Magelight page: both confirmations, in Windows' own fonts (nothing bundled) |
+| `imports/` | Magelight's Papyrus header, compiled against and never shipped (Magelight installs its own) |
 | `ToTheYield_DISTR.ini` | SPID gives every NPC the (conditional) bystander ability |
-| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: two quests (one per duel kind, Essential aliases), two confirm boxes, the bystander ability, a faction, a keyword, two globals |
+| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: two quests (one per duel kind, Essential aliases), two confirm boxes, the bystander ability, a faction, a keyword, three globals |
 | `layer/whyregister.to-the-yield/` | The SkyrimNet layer: `BeginDuel`, `YieldDuel`, `ChallengeDuel`, `AcceptDuel`, `DeclineDuel` and `YieldNpcDuel` actions, and a prompt that only renders while a duel is on |
 
 - Protection: the NPC sits in an Essential quest alias, so they go into bleedout instead of dying.
@@ -100,13 +109,18 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 - Courage: many civilians are Cowardly and run from any fight. For the duel, each duelist's
   Confidence is raised to Foolhardy and put back afterwards (the original is kept in the save, like
   the relationship rank). Tested live: two cowardly Dawnstar locals then fought it out.
-- NPC duels: both duelists join the vanilla brawl faction, which keeps fellow guards from piling in
-  (without it, one joined within a second in testing).
+- Pile-ons: both duelists join the vanilla brawl faction, in your duels and NPC duels alike, which
+  keeps their friends from piling in. Without it, a fellow guard joined within a second in testing,
+  and up to 0.3.1 your own duels went without it: duel a guard and the other guards joined in. Tested
+  live: two of the opponent's fellow guards stood by, and sword hits still did full damage.
 - Bystanders: the ability's conditions (a duel is on, within 600 units of you, not a duelist) are
   checked by the engine, which switches the ghost flag on and off. No script watches swings. Same
   technique as "Brawling - No Hitting Bystanders" uses for vanilla brawls.
 - The confirm boxes don't name anyone (name tags in message boxes showed up as "[...]" in game); a
-  notification just before each box says who is involved.
+  notification just before each box says who is involved. The Magelight page gets the names as text.
+- The page falls back to the boxes whenever it can't be used: Magelight missing or older than 1.3.0,
+  another mod holding the cursor, the page failing to load, or `TTY_UseMagelight` at 0. Both quests
+  share the one page, each answering on its own listener, and only one confirmation is up at a time.
 - Afterwards, combat is stopped three times over 4 seconds (once wasn't enough in testing), flags are
   restored, and SkyrimNet gets a narration of the outcome.
 
@@ -123,6 +137,7 @@ installed. It only reads the game folder.
 
 - SkyrimNet by the SkyrimNet team
 - PapyrusUtil by exiledviking; Papyrus Extender by powerofthree
+- Magelight UI by Severause (MIT); its Papyrus header is in `imports/` for building
 
 ## License
 

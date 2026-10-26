@@ -12,10 +12,12 @@ Scriptname TTY_NpcDuel extends Quest
 
  SkyrimNet actions (layer actions/): ChallengeDuel (challenger names the target), AcceptDuel and
  DeclineDuel (the challenged NPC answers), YieldNpcDuel (a duelist concedes). An accepted challenge
- shows the player NpcConfirmMsg first: Allow / Stop it / Stop it silently.
+ shows the player NpcConfirmMsg first: Allow / Stop it / Stop it silently, or the same on a Magelight UI
+ page when Magelight is installed (TTY_UI; TTY_UseMagelight 0 = the box always).
 
  StorageUtil keys. The layer's YAML and prompt read the same strings with papyrus_util:
      TTY_NpcDuelActive   int, global (None)   1 while an NPC duel is being fought
+     TTY_NpcAsking       int, global          1 while the player decides whether to allow one
      TTY_NpcChallenger   form, global         the NPC whose challenge is waiting for an answer
      TTY_NpcChallengeTarget form, global      the NPC that challenge waits on
      TTY_NpcChallengePending int, global      1 while a challenge waits (ChallengeDuel is hidden)
@@ -50,6 +52,9 @@ GlobalVariable Property BystanderGuard Auto
 Faction Property DuelistFaction Auto
 {TTY_DuelistFaction: the duelists, whom the ghost ability leaves alone.}
 
+GlobalVariable Property UseMagelight Auto
+{TTY_UseMagelight, shared with TTY_Main: 0 = always the message box. Takes effect at the next load.}
+
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.5 AutoReadOnly
 float Property LeadInSeconds = 1.0 AutoReadOnly
@@ -70,12 +75,35 @@ float startTime = 0.0
 float lastRekick = 0.0
 float disengagedSince = 0.0
 float challengeTime = 0.0
+int uiView = 0             ; the Magelight page this session, 0 = message boxes
+bool uiShowing = false     ; this script's card is up on the page
 
-; States: "" (no duel), "Fighting", "Ending".
+; States: "" (no duel), "Asking" (the player decides), "Fighting", "Ending".
 
 Event OnInit()
     Reset()
+    SetupUI()
 EndEvent
+
+; Magelight forgets mods, views and listeners between sessions, and mod event registrations last one
+; load, so this runs on every load. The page is TTY_Main's too: this script listens on its own name.
+Function SetupUI()
+    uiView = 0
+    uiShowing = false
+    if !UseMagelight || UseMagelight.GetValue() <= 0
+        return
+    endif
+    uiView = TTY_UI.Setup("ttyNpcChoice")
+    if uiView
+        RegisterForModEvent("Magelight_JS_ttyNpcChoice", "OnUiChoice")
+        RegisterForModEvent("Magelight_UIModeExited", "OnUiExited")
+        RegisterForModEvent("Magelight_ViewLoadFailed", "OnUiFailed")
+    endif
+EndFunction
+
+bool Function UiReady()
+    return uiView != 0 && !uiShowing && UseMagelight && UseMagelight.GetValue() > 0
+EndFunction
 
 ; Outside a fight the only update is the challenge expiry, registered by ChallengeDuel.
 Event OnUpdate()
@@ -141,11 +169,48 @@ Function AcceptDuel(Actor akAccepter)
         return
     endif
 
-    Debug.Notification(challenger.GetDisplayName() + " and " + akAccepter.GetDisplayName() + " are about to duel")
-    ; Buttons, in NpcConfirmMsg's order: 0 Allow, 1 Stop it, 2 Stop it silently.
     DuelistA.ForceRefTo(challenger)
     DuelistB.ForceRefTo(akAccepter)
-    int choice = NpcConfirmMsg.Show()
+    ; Asking holds off any other duel until the player answers, which on the page comes later (OnUiChoice).
+    GoToState("Asking")
+    StorageUtil.SetIntValue(None, "TTY_NpcAsking", 1)
+    if UiReady()
+        uiShowing = true
+        string json = "{\"a\":\"" + JsonEscape(challenger.GetDisplayName()) + "\"" \
+            + ",\"b\":\"" + JsonEscape(akAccepter.GetDisplayName()) + "\"}"
+        if TTY_UI.Open(uiView, "ttyNpcOffer", json)
+            return
+        endif
+        uiShowing = false
+    endif
+    AskWithBox()
+EndFunction
+
+Function AskWithBox()
+    Actor challenger = DuelistA.GetActorReference()
+    Actor akAccepter = DuelistB.GetActorReference()
+    if challenger && akAccepter
+        ; The box can't name anyone, so the notification just before it does.
+        Debug.Notification(challenger.GetDisplayName() + " and " + akAccepter.GetDisplayName() + " are about to duel")
+    endif
+    ; Buttons, in NpcConfirmMsg's order: 0 Allow, 1 Stop it, 2 Stop it silently.
+    Decide(NpcConfirmMsg.Show())
+EndFunction
+
+; The player's answer, from the box or the page: 0 Allow, 1 Stop it, 2 Stop it silently.
+Function Decide(int choice)
+    if GetState() != "Asking"
+        return
+    endif
+    GoToState("")
+    StorageUtil.UnsetIntValue(None, "TTY_NpcAsking")
+    Actor challenger = DuelistA.GetActorReference()
+    Actor akAccepter = DuelistB.GetActorReference()
+    if !challenger || !akAccepter
+        DuelistA.Clear()
+        DuelistB.Clear()
+        return
+    endif
     if choice != 0
         DuelistA.Clear()
         DuelistB.Clear()
@@ -158,8 +223,8 @@ Function AcceptDuel(Actor akAccepter)
         endif
         return
     endif
-    ; The box paused the game: check again in case something changed around it.
-    reason = CannotDuelReason(challenger, akAccepter)
+    ; The game was paused while the player chose: check again in case something changed around it.
+    string reason = CannotDuelReason(challenger, akAccepter)
     if reason != ""
         DuelistA.Clear()
         DuelistB.Clear()
@@ -167,6 +232,56 @@ Function AcceptDuel(Actor akAccepter)
         return
     endif
     StartDuel(challenger, akAccepter)
+EndFunction
+
+; ---------------------------------------------------------------------------------------------
+; Magelight page events. Every mod, and TTY_Main, hears every Magelight event: each checks the view
+; and whether this script's card is the one up. Functions, not Events: Caprica refuses new event names
+; on a non-native script, and in a Skyrim .pex an event is only a function; SKSE calls it by name.
+; ---------------------------------------------------------------------------------------------
+
+; The card's buttons: "allow", "stop", "quiet".
+Function OnUiChoice(string asEventName, string asChoice, float afView, Form akSender)
+    if uiView == 0 || afView as int != uiView || !uiShowing
+        return
+    endif
+    uiShowing = false
+    TTY_UI.Close(uiView)
+    if asChoice == "allow"
+        Decide(0)
+    elseif asChoice == "stop"
+        Decide(1)
+    else
+        Decide(2)
+    endif
+EndFunction
+
+; Escape or the host's toggle key closed the page: the duel is stopped silently.
+; TTY_UI.Close raises this too, after uiShowing is already cleared, so that one is ignored.
+Function OnUiExited(string asEventName, string asModId, float afView, Form akSender)
+    if uiView == 0 || afView as int != uiView || !uiShowing
+        return
+    endif
+    uiShowing = false
+    TTY_UI.Close(uiView)
+    Decide(2)
+EndFunction
+
+; The page couldn't load: the box for the rest of the session, and for the card if one was up.
+Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSender)
+    if uiView == 0 || afView as int != uiView
+        return
+    endif
+    Debug.Trace("[TTY] Magelight page failed to load (" + asDetail + "): message boxes this session")
+    bool wasShowing = uiShowing
+    uiShowing = false
+    uiView = 0
+    if wasShowing
+        TTY_UI.Close(afView as int)
+        if GetState() == "Asking"
+            AskWithBox()
+        endif
+    endif
 EndFunction
 
 ; DeclineDuel.yaml: the challenged speaker refuses.
@@ -259,6 +374,8 @@ string Function CannotDuelReason(Actor akA, Actor akB)
     elseif StorageUtil.GetIntValue(None, "TTY_Active", 0) == 1
         ; One duel of any kind at a time: not while the player is fighting one (TTY_Main).
         return "a duel is already under way"
+    elseif StorageUtil.GetIntValue(None, "TTY_Asking", 0) == 1
+        return "another duel is waiting on your answer"
     elseif !akA || !akB || akA == akB || akA == player || akB == player
         return "needs two NPCs"
     elseif akA.IsDead() || akB.IsDead()
@@ -288,6 +405,14 @@ EndFunction
 
 ; From TTY_NpcPlayerAlias.OnPlayerLoadGame.
 Function OnGameLoad()
+    SetupUI()
+    ; Saved while the player was deciding (the page is gone now): treated as stopped silently.
+    if GetState() == "Asking"
+        DuelistA.Clear()
+        DuelistB.Clear()
+        GoToState("")
+    endif
+    StorageUtil.UnsetIntValue(None, "TTY_NpcAsking")
     ; GetCurrentRealTime restarts with every game launch, so a duel saved mid-fight restarts its clock.
     startTime = Utility.GetCurrentRealTime()
     lastRekick = startTime
@@ -380,6 +505,10 @@ State Fighting
 EndState
 
 State Ending
+EndState
+
+; Nothing differs while the player decides; the state itself keeps other duels out (CannotDuelReason).
+State Asking
 EndState
 
 Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
@@ -579,6 +708,7 @@ Function Reset()
         DuelistB.Clear()
     endif
     StorageUtil.UnsetIntValue(None, "TTY_NpcDuelActive")
+    StorageUtil.UnsetIntValue(None, "TTY_NpcAsking")
     StorageUtil.UnsetStringValue(None, "TTY_NpcStatus")
     ClearChallenge()
     RestoreAllConfidence()

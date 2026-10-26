@@ -8,10 +8,13 @@ Scriptname TTY_Main extends Quest
  way it was, and tells SkyrimNet how the duel ended.
 
  SkyrimNet calls BeginDuel and YieldDuel (layer actions/BeginDuel.yaml and YieldDuel.yaml).
+ The player confirms the duel on a Magelight UI page when Magelight is installed (TTY_UI), else in
+ ConfirmMsg; set TTY_UseMagelight to 0 for the box always.
 
  StorageUtil keys. The layer's YAML and prompt read the same strings with papyrus_util, so rename
  one here and you must rename it there too:
      TTY_Active             int, global (None)   1 while a duel is being fought
+     TTY_Asking             int, global          1 while the player's duel offer waits for an answer
      TTY_Opponent           int, on the NPC      1 while that NPC is the opponent
      TTY_Status             string, global       one line about the duel, for spectators' prompts
      TTY_SetPlayerEssential int, global          1 while the player is essential because of us
@@ -39,8 +42,10 @@ Faction Property BrawlFaction Auto
  UseBrawlFaction is 1. SeverActions' brawl manager watches the same faction.}
 
 GlobalVariable Property UseBrawlFaction Auto
-{TTY_UseBrawlFaction, default 0. 1 also puts both fighters in the vanilla brawl faction, which may
- keep guards and bystanders out of it. Console: set TTY_UseBrawlFaction to 1}
+{TTY_UseBrawlFaction, default 1: both fighters join the vanilla brawl faction, which keeps the
+ opponent's friends out of it. At 0 (as shipped up to 0.3.1) fellow guards piled on the player; tested
+ live 2026-10-26, two of the opponent's fellow guards stayed out and sword hits kept full damage.
+ Console: set TTY_UseBrawlFaction to 0 to turn it off.}
 
 GlobalVariable Property BystanderGuard Auto
 {TTY_BystanderGuard: 1 while a duel is fought. TTY_BystanderGhostAbility (given to NPCs by SPID,
@@ -49,6 +54,10 @@ GlobalVariable Property BystanderGuard Auto
 
 Faction Property DuelistFaction Auto
 {TTY_DuelistFaction: the duelists, whom the ghost ability leaves alone.}
+
+GlobalVariable Property UseMagelight Auto
+{TTY_UseMagelight, default 1. 0 = always the message box, even with Magelight UI installed. Console:
+ set TTY_UseMagelight to 0. Turning it back on takes effect at the next load.}
 
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.25 AutoReadOnly
@@ -70,12 +79,35 @@ float sheathedSince = 0.0
 bool playerHasDrawn = false
 float lastRekick = 0.0
 float disengagedSince = 0.0
+int uiView = 0             ; the Magelight page this session, 0 = message boxes
+bool uiShowing = false     ; the offer is up on the page
 
-; States: "" (no duel), "Fighting", "Ending" (cleaning up; no new duel can start).
+; States: "" (no duel), "Asking" (the offer is up), "Fighting", "Ending" (cleaning up; no new duel can start).
 
 Event OnInit()
     Reset()
+    SetupUI()
 EndEvent
+
+; Magelight forgets mods, views and listeners between sessions, and mod event registrations last one
+; load, so this runs on every load.
+Function SetupUI()
+    uiView = 0
+    uiShowing = false
+    if !UseMagelight || UseMagelight.GetValue() <= 0
+        return
+    endif
+    uiView = TTY_UI.Setup("ttyDuelChoice")
+    if uiView
+        RegisterForModEvent("Magelight_JS_ttyDuelChoice", "OnUiChoice")
+        RegisterForModEvent("Magelight_UIModeExited", "OnUiExited")
+        RegisterForModEvent("Magelight_ViewLoadFailed", "OnUiFailed")
+    endif
+EndFunction
+
+bool Function UiReady()
+    return uiView != 0 && !uiShowing && UseMagelight && UseMagelight.GetValue() > 0
+EndFunction
 
 ; ---------------------------------------------------------------------------------------------
 ; SkyrimNet actions
@@ -95,15 +127,47 @@ Function BeginDuel(Actor akSpeaker)
         return
     endif
 
-    Debug.Notification(akSpeaker.GetDisplayName() + " offers you a duel")
-    ; Buttons, in ConfirmMsg's order: 0 Fight, 1 Refuse, 2 Refuse silently (SeverActions' convention).
     OpponentAlias.ForceRefTo(akSpeaker)
-    int choice = ConfirmMsg.Show()
-    if choice != 0
+    ; Asking holds off any other duel until the player answers, which on the page comes later (OnUiChoice).
+    GoToState("Asking")
+    StorageUtil.SetIntValue(None, "TTY_Asking", 1)
+    if UiReady()
+        uiShowing = true
+        string json = "{\"name\":\"" + JsonEscape(akSpeaker.GetDisplayName()) + "\"}"
+        if TTY_UI.Open(uiView, "ttyOffer", json)
+            return
+        endif
+        uiShowing = false
+    endif
+    AskWithBox()
+EndFunction
+
+Function AskWithBox()
+    Actor npc = OpponentAlias.GetActorReference()
+    if npc
+        ; The box can't name anyone, so the notification just before it does.
+        Debug.Notification(npc.GetDisplayName() + " offers you a duel")
+    endif
+    ; Buttons, in ConfirmMsg's order: 0 Fight, 1 Refuse, 2 Refuse silently (SeverActions' convention).
+    Decide(ConfirmMsg.Show())
+EndFunction
+
+; The player's answer, from the box or the page: 0 Fight, 1 Refuse, 2 Refuse silently.
+Function Decide(int aiChoice)
+    if GetState() != "Asking"
+        return
+    endif
+    GoToState("")
+    StorageUtil.UnsetIntValue(None, "TTY_Asking")
+    Actor akSpeaker = OpponentAlias.GetActorReference()
+    if !akSpeaker
+        return
+    endif
+    if aiChoice != 0
         OpponentAlias.Clear()
         ; Either way, the NPC cannot ask again straight away.
         SkyrimNetApi.SetActionCooldown("BeginDuel", CooldownSeconds)
-        if choice == 1
+        if aiChoice == 1
             ; Narrated, so the NPC reacts to being turned down.
             Actor player = Game.GetPlayer()
             SkyrimNetApi.DirectNarration("*" + player.GetDisplayName() + " refuses to duel " + akSpeaker.GetDisplayName() + ".*", akSpeaker, player)
@@ -114,14 +178,64 @@ Function BeginDuel(Actor akSpeaker)
         return
     endif
 
-    ; The box paused the game, but check again in case something changed around it.
-    reason = CannotDuelReason(akSpeaker)
+    ; The game was paused while the player chose, but check again in case something changed around it.
+    string reason = CannotDuelReason(akSpeaker)
     if reason != ""
         OpponentAlias.Clear()
         Debug.Notification("No duel: " + reason + ".")
         return
     endif
     StartFight(akSpeaker)
+EndFunction
+
+; ---------------------------------------------------------------------------------------------
+; Magelight page events. Every mod, and TTY_NpcDuel, hears every Magelight event: each checks the view
+; and whether this script's card is the one up. Functions, not Events: Caprica refuses new event names
+; on a non-native script, and in a Skyrim .pex an event is only a function; SKSE calls it by name.
+; ---------------------------------------------------------------------------------------------
+
+; The offer's buttons: "fight", "refuse", "quiet".
+Function OnUiChoice(string asEventName, string asChoice, float afView, Form akSender)
+    if uiView == 0 || afView as int != uiView || !uiShowing
+        return
+    endif
+    uiShowing = false
+    TTY_UI.Close(uiView)
+    if asChoice == "fight"
+        Decide(0)
+    elseif asChoice == "refuse"
+        Decide(1)
+    else
+        Decide(2)
+    endif
+EndFunction
+
+; Escape or the host's toggle key closed the page: the offer is refused silently.
+; TTY_UI.Close raises this too, after uiShowing is already cleared, so that one is ignored.
+Function OnUiExited(string asEventName, string asModId, float afView, Form akSender)
+    if uiView == 0 || afView as int != uiView || !uiShowing
+        return
+    endif
+    uiShowing = false
+    TTY_UI.Close(uiView)
+    Decide(2)
+EndFunction
+
+; The page couldn't load: the box for the rest of the session, and for the offer if one was up.
+Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSender)
+    if uiView == 0 || afView as int != uiView
+        return
+    endif
+    Debug.Trace("[TTY] Magelight page failed to load (" + asDetail + "): message boxes this session")
+    bool wasShowing = uiShowing
+    uiShowing = false
+    uiView = 0
+    if wasShowing
+        TTY_UI.Close(afView as int)
+        if GetState() == "Asking"
+            AskWithBox()
+        endif
+    endif
 EndFunction
 
 ; YieldDuel.yaml: the opponent concedes in words. Only does anything while Fighting.
@@ -143,6 +257,13 @@ EndFunction
 
 ; TTY_PlayerAlias.OnPlayerLoadGame.
 Function OnGameLoad()
+    SetupUI()
+    ; Saved with an offer up (the page is gone now): the offer lapses, as if refused silently.
+    if GetState() == "Asking"
+        OpponentAlias.Clear()
+        GoToState("")
+    endif
+    StorageUtil.UnsetIntValue(None, "TTY_Asking")
     ; GetCurrentRealTime restarts with every game launch, so a duel saved mid-fight restarts its clock.
     startTime = Utility.GetCurrentRealTime()
     sheathedSince = 0.0
@@ -167,6 +288,8 @@ string Function CannotDuelReason(Actor akNpc)
     if GetState() != "" || StorageUtil.GetIntValue(None, "TTY_NpcDuelActive", 0) == 1
         ; One duel of any kind at a time (TTY_NpcDuel runs the NPC-against-NPC ones).
         return "a duel is already under way"
+    elseif StorageUtil.GetIntValue(None, "TTY_NpcAsking", 0) == 1
+        return "another duel is waiting on your answer"
     elseif !akNpc || akNpc == player || akNpc.IsDead()
         return "no opponent"
     elseif akNpc.IsChild()
@@ -339,6 +462,10 @@ State Fighting
 EndState
 
 State Ending
+EndState
+
+; Nothing differs while the offer is up; the state itself keeps other duels out (CannotDuelReason).
+State Asking
 EndState
 
 Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
@@ -584,6 +711,7 @@ Function Reset()
         PlayerAliasScript.StopWatching()
     endif
     StorageUtil.UnsetIntValue(None, "TTY_Active")
+    StorageUtil.UnsetIntValue(None, "TTY_Asking")
     StorageUtil.UnsetStringValue(None, "TTY_Status")
     GuardOff(None, None)
     RestorePlayerEssential()

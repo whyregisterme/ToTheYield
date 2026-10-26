@@ -42,6 +42,11 @@
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "UseBrawlFaction",
             "Object": "000802:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "UseMagelight",
+            "Object": "00080C:ToTheYield.esp"
           }
         ]
       }

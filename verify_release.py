@@ -46,6 +46,9 @@ expected = [
     'Scripts/TTY_NpcDuelistAlias.pex',
     'Scripts/TTY_NpcPlayerAlias.pex',
     'Scripts/TTY_BystanderGhostEffect.pex',
+    'Scripts/TTY_UI.pex',
+    'Magelight/ToTheYield/manifest.json',
+    'Magelight/ToTheYield/views/prompt/index.html',
     'ToTheYield_DISTR.ini',
     layer + 'manifest.json',
     layer + 'actions/BeginDuel.yaml',
@@ -55,6 +58,28 @@ expected = [
     layer + 'actions/DeclineDuel.yaml',
     layer + 'actions/YieldNpcDuel.yaml',
 ]
+
+# Magelight installs its own Magelight.pex; a copy here would overwrite it (with whatever version
+# imports/ was taken from).
+for n in names:
+    if n.lower() in ('scripts/magelight.pex', 'source/scripts/magelight.psc'):
+        problems.append(f'ships a Magelight file it must not: {n}')
+
+# Magelight refuses a manifest whose modId is not its folder's name, so only ours, matching.
+ml = 'Magelight/'
+ml_dirs = sorted({n[len(ml):].split('/')[0] for n in names if n.startswith(ml)})
+if ml_dirs != ['ToTheYield']:
+    problems.append(f"folders under Magelight/: {ml_dirs}, expected only ['ToTheYield']")
+if ml + 'ToTheYield/manifest.json' in names:
+    try:
+        mlm = json.loads(z.read(ml + 'ToTheYield/manifest.json').decode('utf-8'))
+        if mlm.get('modId', 'ToTheYield') != 'ToTheYield':
+            problems.append(f"Magelight manifest modId {mlm.get('modId')!r} != folder name 'ToTheYield'")
+        for view, v in mlm.get('views', {}).items():
+            if ml + 'ToTheYield/' + v.get('path', '') not in names:
+                problems.append(f"Magelight view {view!r} names a page the zip lacks: {v.get('path')!r}")
+    except ValueError as err:
+        problems.append(f'Magelight manifest.json is not valid JSON: {err}')
 for e in expected:
     if e not in names:
         problems.append(f'missing: {e}')
