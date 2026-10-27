@@ -47,6 +47,8 @@ expected = [
     'Scripts/TTY_NpcPlayerAlias.pex',
     'Scripts/TTY_BystanderGhostEffect.pex',
     'Scripts/TTY_UI.pex',
+    'Scripts/TTY_Records.pex',
+    'Scripts/TTY_RecordPowerEffect.pex',
     'Magelight/ToTheYield/manifest.json',
     'Magelight/ToTheYield/views/prompt/index.html',
     'ToTheYield_DISTR.ini',
@@ -57,6 +59,8 @@ expected = [
     layer + 'actions/AcceptDuel.yaml',
     layer + 'actions/DeclineDuel.yaml',
     layer + 'actions/YieldNpcDuel.yaml',
+    layer + 'prompts/submodules/user_final_instructions/0680_whyregister_duel_status.prompt',
+    layer + 'prompts/submodules/user_final_instructions/0681_whyregister_duel_record.prompt',
 ]
 
 # Magelight installs its own Magelight.pex; a copy here would overwrite it (with whatever version

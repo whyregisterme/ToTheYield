@@ -1,0 +1,21 @@
+{
+  "FormKey": "00080E:ToTheYield.esp",
+  "EditorID": "TTY_RecordPower",
+  "Name": {
+    "TargetLanguage": "English",
+    "Value": "Duel Record"
+  },
+  "EquipmentType": "025BEE:Skyrim.esm",
+  "Description": {
+    "TargetLanguage": "English",
+    "Value": "Your record in duels to the yield, and against each opponent."
+  },
+  "Type": "LesserPower",
+  "CastType": "FireAndForget",
+  "Effects": [
+    {
+      "BaseEffect": "00080D:ToTheYield.esp",
+      "Data": {}
+    }
+  ]
+}

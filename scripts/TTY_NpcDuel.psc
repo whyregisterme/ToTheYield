@@ -293,6 +293,7 @@ Function DeclineDuel(Actor akDecliner)
     ClearChallenge()
     if challenger
         SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(akDecliner.GetDisplayName() + " declined " + challenger.GetDisplayName() + "'s challenge to a duel.") + "\"}", akDecliner, challenger)
+        TTY_Records.Refusal(challenger, akDecliner)
     endif
 EndFunction
 
@@ -514,6 +515,7 @@ EndState
 Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     Actor a = duelA
     Actor b = duelB
+    TTY_Records.Result(a, b, akWinner, asHow)
     ; 1. Stop the fight, and again after each wait below (TTY_Main found once was not enough).
     StopBoth(a, b)
     LeaveBrawl(a, b)

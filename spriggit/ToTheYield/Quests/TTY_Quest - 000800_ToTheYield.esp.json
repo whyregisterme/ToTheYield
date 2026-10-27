@@ -40,6 +40,11 @@
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "RecordPower",
+            "Object": "00080E:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
             "Name": "UseBrawlFaction",
             "Object": "000802:ToTheYield.esp"
           },

@@ -55,6 +55,9 @@ GlobalVariable Property BystanderGuard Auto
 Faction Property DuelistFaction Auto
 {TTY_DuelistFaction: the duelists, whom the ghost ability leaves alone.}
 
+Spell Property RecordPower Auto
+{TTY_RecordPower, the Duel Record lesser power. Given to the player on every load (SetupUI).}
+
 GlobalVariable Property UseMagelight Auto
 {TTY_UseMagelight, default 1. 0 = always the message box, even with Magelight UI installed. Console:
  set TTY_UseMagelight to 0. Turning it back on takes effect at the next load.}
@@ -79,8 +82,13 @@ float sheathedSince = 0.0
 bool playerHasDrawn = false
 float lastRekick = 0.0
 float disengagedSince = 0.0
+float playerStartX = 0.0   ; where each stood when the duel started, to tell who walked away
+float playerStartY = 0.0
+float npcStartX = 0.0
+float npcStartY = 0.0
 int uiView = 0             ; the Magelight page this session, 0 = message boxes
-bool uiShowing = false     ; the offer is up on the page
+bool uiShowing = false     ; the offer, or the record, is up on the page
+bool recordShowing = false ; it is the record (the Duel Record power), not an offer
 
 ; States: "" (no duel), "Asking" (the offer is up), "Fighting", "Ending" (cleaning up; no new duel can start).
 
@@ -94,6 +102,12 @@ EndEvent
 Function SetupUI()
     uiView = 0
     uiShowing = false
+    recordShowing = false
+    ; The Duel Record power works with or without Magelight (a message box then).
+    Actor player = Game.GetPlayer()
+    if RecordPower && !player.HasSpell(RecordPower)
+        player.AddSpell(RecordPower, false)
+    endif
     if !UseMagelight || UseMagelight.GetValue() <= 0
         return
     endif
@@ -133,7 +147,8 @@ Function BeginDuel(Actor akSpeaker)
     StorageUtil.SetIntValue(None, "TTY_Asking", 1)
     if UiReady()
         uiShowing = true
-        string json = "{\"name\":\"" + JsonEscape(akSpeaker.GetDisplayName()) + "\"}"
+        string json = "{\"name\":\"" + JsonEscape(akSpeaker.GetDisplayName()) + "\"" \
+            + ",\"rec\":\"" + JsonEscape(TTY_Records.VsPlayerLine(akSpeaker)) + "\"}"
         if TTY_UI.Open(uiView, "ttyOffer", json)
             return
         endif
@@ -171,6 +186,7 @@ Function Decide(int aiChoice)
             ; Narrated, so the NPC reacts to being turned down.
             Actor player = Game.GetPlayer()
             SkyrimNetApi.DirectNarration("*" + player.GetDisplayName() + " refuses to duel " + akSpeaker.GetDisplayName() + ".*", akSpeaker, player)
+            TTY_Records.Refusal(akSpeaker, player)
         else
             ; Silent: nothing recorded, nothing said.
             Debug.Trace("[TTY] Player silently refused a duel with " + akSpeaker.GetDisplayName())
@@ -201,6 +217,11 @@ Function OnUiChoice(string asEventName, string asChoice, float afView, Form akSe
     endif
     uiShowing = false
     TTY_UI.Close(uiView)
+    if recordShowing
+        ; The record card's only button is Close.
+        recordShowing = false
+        return
+    endif
     if asChoice == "fight"
         Decide(0)
     elseif asChoice == "refuse"
@@ -218,6 +239,10 @@ Function OnUiExited(string asEventName, string asModId, float afView, Form akSen
     endif
     uiShowing = false
     TTY_UI.Close(uiView)
+    if recordShowing
+        recordShowing = false
+        return
+    endif
     Decide(2)
 EndFunction
 
@@ -232,10 +257,31 @@ Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSe
     uiView = 0
     if wasShowing
         TTY_UI.Close(afView as int)
-        if GetState() == "Asking"
+        if recordShowing
+            recordShowing = false
+            Debug.MessageBox(TTY_Records.PlayerText())
+        elseif GetState() == "Asking"
             AskWithBox()
         endif
     endif
+EndFunction
+
+; TTY_RecordPowerEffect: the Duel Record power. Not mid-duel or while a duel offer is up.
+Function ShowRecord()
+    if GetState() != "" || StorageUtil.GetIntValue(None, "TTY_NpcAsking", 0) == 1
+        Debug.Notification("Your duel record can wait until this is settled.")
+        return
+    endif
+    if UiReady()
+        uiShowing = true
+        recordShowing = true
+        if TTY_UI.Open(uiView, "ttyRecord", TTY_Records.PlayerJson())
+            return
+        endif
+        uiShowing = false
+        recordShowing = false
+    endif
+    Debug.MessageBox(TTY_Records.PlayerText())
 EndFunction
 
 ; YieldDuel.yaml: the opponent concedes in words. Only does anything while Fighting.
@@ -302,10 +348,34 @@ string Function CannotDuelReason(Actor akNpc)
         return "dismount first"
     elseif akNpc.IsHostileToActor(player)
         return akNpc.GetDisplayName() + " is hostile"
+    elseif Elsewhere(akNpc)
+        return akNpc.GetDisplayName() + " has gone elsewhere"
     elseif akNpc.GetDistance(player) > MaxStartDistance
         return akNpc.GetDisplayName() + " is too far away"
     endif
     return ""
+EndFunction
+
+; akNpc has gone where the duel can't follow: unloaded, or through a door into another interior or
+; out of one. Two exterior cells side by side are the same open ground, so distance decides those.
+bool Function Elsewhere(Actor akNpc)
+    Actor player = Game.GetPlayer()
+    if !akNpc.Is3DLoaded()
+        return true
+    endif
+    Cell a = akNpc.GetParentCell()
+    Cell b = player.GetParentCell()
+    if !a || !b
+        return true
+    endif
+    return a != b && (a.IsInterior() || b.IsInterior())
+EndFunction
+
+; How far akActor has moved (on the ground plane) from (afX, afY).
+float Function Strayed(Actor akActor, float afX, float afY)
+    float dx = akActor.GetPositionX() - afX
+    float dy = akActor.GetPositionY() - afY
+    return Math.Sqrt(dx * dx + dy * dy)
 EndFunction
 
 ; A current follower cannot be dueled. Tested live on a SeverActions companion, 2026-10-23: the
@@ -324,6 +394,10 @@ Function StartFight(Actor akNpc)
     Actor player = Game.GetPlayer()
     opponent = akNpc
     GoToState("Fighting")
+    playerStartX = player.GetPositionX()
+    playerStartY = player.GetPositionY()
+    npcStartX = akNpc.GetPositionX()
+    npcStartY = akNpc.GetPositionY()
 
     ; Protect the player. Whether we did it is kept in the co-save, so a reload or a quest restart
     ; can always undo it (OnGameLoad, Reset), and a player who was already essential stays so.
@@ -387,8 +461,18 @@ State Fighting
             ; An essential player does not play the bleedout kneel: they drop at zero health.
             EndDuel(opponent, player, "downed")
             return
+        elseif Elsewhere(opponent)
+            ; Through a door or unloaded (seen live 2026-10-26: an NPC agreed, then walked out through
+            ; a door). Not the player's forfeit, and not a result either.
+            EndDuel(None, None, "opponent_left")
+            return
         elseif opponent.GetDistance(player) > WalkAwayDistance
-            EndDuel(opponent, player, "walked_away")
+            ; Whoever strayed further from where they stood at the start is the one who left.
+            if Strayed(opponent, npcStartX, npcStartY) > Strayed(player, playerStartX, playerStartY)
+                EndDuel(None, None, "opponent_left")
+            else
+                EndDuel(opponent, player, "walked_away")
+            endif
             return
         elseif now - startTime > MaxDuelSeconds
             EndDuel(None, None, "time")
@@ -471,6 +555,7 @@ EndState
 Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     Actor player = Game.GetPlayer()
     Actor npc = opponent
+    TTY_Records.Result(player, npc, akWinner, asHow)
     ; After an outside attack the player may still be fighting someone else: leave that alone.
     bool calmPlayer = asHow != "interrupted"
 
@@ -596,6 +681,8 @@ string Function Outcome(Actor akNpc, Actor akWinner, Actor akLoser, string asHow
         return "*" + p + " sheathes their weapon and yields. " + n + " has won the duel.*"
     elseif asHow == "walked_away"
         return "*" + p + " walks away from the duel with " + n + ", forfeiting it.*"
+    elseif asHow == "opponent_left"
+        return "*" + n + " leaves before the duel with " + p + " is settled, and it is called off.*"
     elseif asHow == "time"
         return "*Neither " + p + " nor " + n + " can finish it. The duel ends in a draw.*"
     elseif asHow == "never_drew"

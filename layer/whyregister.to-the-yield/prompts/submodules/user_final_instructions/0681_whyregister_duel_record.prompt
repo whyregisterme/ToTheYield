@@ -1,0 +1,34 @@
+{% if render_mode == "full" or render_mode == "thoughts" %}
+{#
+  To the Yield: this NPC's duel record (TTY_Records). Only what they are part of: their own record,
+  and their record against whoever they are speaking to. Renders nothing for anyone who has never
+  had a result or a spoken refusal, so an NPC who never dueled hears nothing about anyone's duels.
+#}
+{% set w = papyrus_util("GetIntValue", npc.UUID, "TTY_RecW", 0) %}
+{% set l = papyrus_util("GetIntValue", npc.UUID, "TTY_RecL", 0) %}
+{% set d = papyrus_util("GetIntValue", npc.UUID, "TTY_RecD", 0) %}
+{% if w + l + d > 0 %}
+- Your record in formal duels to the yield: {{ w }} won, {{ l }} lost{% if d > 0 %}, {{ d }} drawn{% endif %}.
+{% endif %}
+{% if responseTarget and responseTarget.UUID != 0 %}
+{% if responseTarget.type == "player" %}
+{% set foe = player.name %}
+{% set vw = papyrus_util("GetIntValue", npc.UUID, "TTY_VsPlayerW", 0) %}
+{% set vl = papyrus_util("GetIntValue", npc.UUID, "TTY_VsPlayerL", 0) %}
+{% set vd = papyrus_util("GetIntValue", npc.UUID, "TTY_VsPlayerD", 0) %}
+{% set vr = papyrus_util("GetIntValue", npc.UUID, "TTY_RefusedByPlayer", 0) %}
+{% else %}
+{% set foe = decnpc(responseTarget.UUID).name %}
+{% set vw = papyrus_util("GetIntValue", npc.UUID, "TTY_VsW|" + foe, 0) %}
+{% set vl = papyrus_util("GetIntValue", npc.UUID, "TTY_VsL|" + foe, 0) %}
+{% set vd = papyrus_util("GetIntValue", npc.UUID, "TTY_VsD|" + foe, 0) %}
+{% set vr = papyrus_util("GetIntValue", npc.UUID, "TTY_RefusedBy|" + foe, 0) %}
+{% endif %}
+{% if vw + vl + vd > 0 %}
+- Your duels with {{ foe }}: you have won {{ vw }} and lost {{ vl }}{% if vd > 0 %}, with {{ vd }} drawn{% endif %}.
+{% endif %}
+{% if vr > 0 %}
+- {{ foe }} has turned down your challenge to a duel {% if vr == 1 %}once{% else %}{{ vr }} times{% endif %}.
+{% endif %}
+{% endif %}
+{% endif %}

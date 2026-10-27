@@ -1,0 +1,40 @@
+{
+  "FormKey": "00080D:ToTheYield.esp",
+  "EditorID": "TTY_RecordPowerEffect",
+  "VirtualMachineAdapter": {
+    "Scripts": [
+      {
+        "Name": "TTY_RecordPowerEffect",
+        "Properties": [
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "MainQuest",
+            "Object": "000800:ToTheYield.esp"
+          }
+        ]
+      }
+    ]
+  },
+  "Name": {
+    "TargetLanguage": "English",
+    "Value": "Duel Record"
+  },
+  "Flags": [
+    "NoDuration",
+    "NoMagnitude",
+    "NoArea",
+    "HideInUI"
+  ],
+  "Archetype": {
+    "MutagenObjectType": "MagicEffectArchetype",
+    "Type": "Script"
+  },
+  "CastType": "FireAndForget",
+  "DualCastScale": 1.0,
+  "CastingSoundLevel": "Normal",
+  "Sounds": [],
+  "Description": {
+    "TargetLanguage": "English",
+    "Value": ""
+  }
+}

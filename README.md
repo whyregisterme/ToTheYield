@@ -42,7 +42,8 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 - **Nobody dies.** Your opponent kneels when beaten. You drop at zero health and they stop attacking.
   Afterwards, whoever went down gets back up with some health.
 - **A duel also ends** if you walk away, never draw your weapon, someone outside the duel attacks
-  either of you, or 3 minutes pass. Your followers are kept out of it.
+  either of you, or 3 minutes pass. Your followers are kept out of it. If your opponent is the one
+  who leaves (through a door, say), the duel is simply called off.
 - **Friends can duel you; followers need dismissing first.** A current follower won't fight you (their
   follower status stops it), so dismiss them, then duel. If an opponent still won't actually fight
   (stays out of combat for about 4 seconds), the duel is called off instead of dragging on.
@@ -63,6 +64,19 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
   other, so that pair is refused. Your followers don't issue challenges; a follower being
   challenged hasn't been tested, and since followers won't fight you, they may not fight here either.
 - **One duel at a time.** While any duel is on, yours or theirs, no other can start.
+
+### Duel records
+
+- **Everyone's record is kept**, in your duels and in NPC duels: wins, losses and draws, and head to
+  head. Beating someone or making them yield is a win; walking away forfeits, so it counts as a loss;
+  running out of time is a draw. Duels that are interrupted or called off don't count.
+- **Turning a challenge down aloud** is remembered by the challenger. Refusing silently never is.
+- **NPCs know only their own record**: how they've done overall, and against whoever they're talking
+  to. Someone who has never fought a duel hears nothing about anyone's.
+- **Duel Record**, a lesser power you're given, shows your record and a row for each opponent (on the
+  Magelight page, or in a box without it). When someone you've fought before challenges you again,
+  their offer shows your record against them.
+- Records start with 0.5.0; duels fought on earlier versions aren't counted.
 
 ### Bystanders (needs SPID)
 
@@ -91,12 +105,14 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 | `scripts/TTY_NpcDuel.psc` | NPC against NPC: challenge, accept, the fight, the end. Its header lists its StorageUtil keys |
 | `scripts/TTY_NpcDuelistAlias.psc`, `TTY_NpcPlayerAlias.psc` | A duelist went down or was hit; cleanup after a reload |
 | `scripts/TTY_BystanderGhostEffect.psc` | Turns a nearby bystander ghost for the length of a duel |
+| `scripts/TTY_Records.psc` | Duel records: every result and spoken refusal, kept on the actors. Its header lists the keys |
+| `scripts/TTY_RecordPowerEffect.psc` | The Duel Record power |
 | `scripts/TTY_UI.psc` | Every Magelight UI call, behind a check that Magelight is installed, new enough and ready |
-| `magelight/ToTheYield/` | The Magelight page: both confirmations, in Windows' own fonts (nothing bundled) |
+| `magelight/ToTheYield/` | The Magelight page: both confirmations and the record, in Windows' own fonts (nothing bundled) |
 | `imports/` | Magelight's Papyrus header, compiled against and never shipped (Magelight installs its own) |
 | `ToTheYield_DISTR.ini` | SPID gives every NPC the (conditional) bystander ability |
-| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: two quests (one per duel kind, Essential aliases), two confirm boxes, the bystander ability, a faction, a keyword, three globals |
-| `layer/whyregister.to-the-yield/` | The SkyrimNet layer: `BeginDuel`, `YieldDuel`, `ChallengeDuel`, `AcceptDuel`, `DeclineDuel` and `YieldNpcDuel` actions, and a prompt that only renders while a duel is on |
+| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: two quests (one per duel kind, Essential aliases), two confirm boxes, the bystander ability, the Duel Record power, a faction, a keyword, three globals |
+| `layer/whyregister.to-the-yield/` | The SkyrimNet layer: `BeginDuel`, `YieldDuel`, `ChallengeDuel`, `AcceptDuel`, `DeclineDuel` and `YieldNpcDuel` actions, a prompt that only renders while a duel is on, and one with the speaker's own record (nothing for someone without one) |
 
 - Protection: the NPC sits in an Essential quest alias, so they go into bleedout instead of dying.
   The player is set essential only for the duel. The vanilla brawl faction alone does **not** stop

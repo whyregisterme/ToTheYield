@@ -7,6 +7,9 @@
   The duel confirmations for To the Yield, on Magelight UI. One page, two cards, two scripts:
     TTY_Main    calls window.ttyOffer(json)    {name}  and hears window.ttyDuelChoice("fight"|"refuse"|"quiet")
     TTY_NpcDuel calls window.ttyNpcOffer(json) {a, b}  and hears window.ttyNpcChoice("allow"|"stop"|"quiet")
+    TTY_Main    calls window.ttyRecord(json)   {name, w, l, d, foes:[{name, w, l, d, r}]}  and hears
+                window.ttyDuelChoice("close")  (the Duel Record power)
+  ttyOffer's json may also carry rec: the player's record against that opponent, or "".
   Each script registered its own listener, so an answer only reaches the one that asked.
   Same look as Hours Well Spent's page. Fonts are the ones Windows ships, as SeverActions does, so
   nothing is bundled.
@@ -57,6 +60,16 @@
   button.quiet { color: var(--ink-soft); border-color: var(--line); }
   button:hover { border-color: var(--accent); }
   button.primary:hover { background: #d8b673; }
+  .rec { margin: 0; font-family: var(--sans); font-size: 14px; color: var(--accent); }
+  .totals { display: flex; gap: 10px; }
+  .total { flex: 1 1 0; padding: 12px 0 10px; border: 1px solid var(--line); border-radius: 3px; text-align: center; }
+  .total b { display: block; font-family: var(--serif-hero); font-size: 30px; font-weight: 400; color: var(--ink-strong); }
+  .total span { font-family: var(--sans); font-size: 12px; letter-spacing: 0.12em; color: var(--ink-faint); }
+  .foes { max-height: 300px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--sans); font-size: 15px; }
+  th { text-align: left; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; color: var(--ink-faint); padding: 0 0 8px; }
+  td { padding: 8px 0; border-top: 1px solid var(--line); }
+  th.n, td.n { text-align: right; width: 44px; font-variant-numeric: tabular-nums; }
   button:focus { outline: 2px solid var(--ink-strong); outline-offset: 2px; }
 </style>
 </head>
@@ -69,6 +82,7 @@
   </div>
   <div class="rule" aria-hidden="true"></div>
   <p class="terms">Real weapons, fought until one of you yields or goes down. Nobody dies.</p>
+  <p class="rec" id="offerRec"></p>
   <p class="meta">Sheathe your weapon to yield.</p>
   <div class="buttons">
     <button type="button" class="primary" id="fight" data-choice="fight" data-ml-sound="ok">Fight</button>
@@ -97,6 +111,22 @@
   <p class="note">&ldquo;Stop it&rdquo; has you step between them, and they&rsquo;ll remember it. &ldquo;Silently&rdquo; doesn&rsquo;t.</p>
 </section>
 
+<section class="card" id="record" aria-labelledby="recordTitle">
+  <div class="head">
+    <p class="kicker">TO THE YIELD</p>
+    <h1 id="recordTitle">Duel record</h1>
+  </div>
+  <div class="totals">
+    <div class="total"><b id="recW">0</b><span>WON</span></div>
+    <div class="total"><b id="recL">0</b><span>LOST</span></div>
+    <div class="total"><b id="recD">0</b><span>DRAWN</span></div>
+  </div>
+  <div class="foes" id="recFoes"></div>
+  <div class="buttons">
+    <button type="button" class="primary" id="recClose" data-choice="close" data-ml-sound="cancel">Close</button>
+  </div>
+</section>
+
 <script>
 (function () {
   function parse(arg) {
@@ -107,14 +137,16 @@
   }
   function text(id, value) { document.getElementById(id).textContent = value || ''; }
   // Which card is up, and so which script's listener its answer goes to.
-  var LISTENER = { offer: 'ttyDuelChoice', npc: 'ttyNpcChoice' };
+  var LISTENER = { offer: 'ttyDuelChoice', npc: 'ttyNpcChoice', record: 'ttyDuelChoice' };
+  var CARDS = ['offer', 'npc', 'record'];
   var current = '';
   var answered = false;
   function show(id, focusId) {
     current = id;
     answered = false;
-    document.getElementById('offer').classList.toggle('on', id === 'offer');
-    document.getElementById('npc').classList.toggle('on', id === 'npc');
+    for (var i = 0; i < CARDS.length; i++) {
+      document.getElementById(CARDS[i]).classList.toggle('on', CARDS[i] === id);
+    }
     var f = document.getElementById(focusId);
     if (f) { f.focus(); }
   }
@@ -124,6 +156,7 @@
     var d = parse(arg);
     var name = d.name || 'Your opponent';
     text('offerTitle', name + ' offers you a duel');
+    text('offerRec', d.rec);
     text('offerNote', '“Refuse” tells ' + name + ' you turned them down. “Silently” doesn’t.');
     show('offer', 'fight');
   };
@@ -135,13 +168,54 @@
     show('npc', 'allow');
   };
 
+  // {name, w, l, d, foes:[{name, w, l, d, r}]}: the player's side. Most-fought opponents first.
+  window.ttyRecord = function (arg) {
+    var d = parse(arg);
+    text('recW', String(d.w || 0));
+    text('recL', String(d.l || 0));
+    text('recD', String(d.d || 0));
+    var foes = (d.foes || []).slice().sort(function (x, y) {
+      return (y.w + y.l + y.d) - (x.w + x.l + x.d);
+    });
+    var box = document.getElementById('recFoes');
+    box.textContent = '';
+    if (!foes.length) {
+      var p = document.createElement('p');
+      p.className = 'note';
+      p.textContent = (d.w || d.l || d.d) ? 'Your past opponents are no longer around.' : 'You have not fought a duel to the yield yet.';
+      box.appendChild(p);
+    } else {
+      var t = document.createElement('table');
+      var head = t.insertRow();
+      ['Opponent', 'Won', 'Lost', 'Drawn'].forEach(function (h, i) {
+        var th = document.createElement('th');
+        th.textContent = h;
+        if (i) { th.className = 'n'; }
+        head.appendChild(th);
+      });
+      foes.forEach(function (f) {
+        var r = t.insertRow();
+        var c = r.insertCell();
+        c.textContent = f.name + (f.r ? '  (you turned them down ' + (f.r === 1 ? 'once' : f.r + ' times') + ')' : '');
+        [f.w, f.l, f.d].forEach(function (v) {
+          var n = r.insertCell();
+          n.className = 'n';
+          n.textContent = String(v || 0);
+        });
+      });
+      box.appendChild(t);
+    }
+    show('record', 'recClose');
+  };
+
   function answer(choice) {
     if (answered || !current) { return; }
     answered = true;
     var fn = window[LISTENER[current]];
     current = '';
-    document.getElementById('offer').classList.remove('on');
-    document.getElementById('npc').classList.remove('on');
+    for (var i = 0; i < CARDS.length; i++) {
+      document.getElementById(CARDS[i]).classList.remove('on');
+    }
     if (typeof fn === 'function') { fn(choice); }
   }
 
