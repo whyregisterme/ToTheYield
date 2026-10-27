@@ -74,6 +74,7 @@ float Property RecoverHealthFraction = 0.3 AutoReadOnly  ; of base health, for w
 int Property CooldownSeconds = 120 AutoReadOnly          ; before BeginDuel is offered again
 float Property RekickSeconds = 1.0 AutoReadOnly          ; between StartCombat retries
 float Property EngageGraceSeconds = 4.0 AutoReadOnly     ; opponent out of the fight this long = called off
+float Property SAStartSeconds = 15.0 AutoReadOnly        ; SeverActions' companion duel must start within this
 
 Actor opponent = None
 bool brawlFactionUsed = false
@@ -87,6 +88,9 @@ float playerStartY = 0.0
 float npcStartX = 0.0
 float npcStartY = 0.0
 int uiView = 0             ; the Magelight page this session, 0 = message boxes
+int saHandle = 0           ; SeverActions' duel (a companion duel, TTY_SA), 0 = To the Yield's own
+bool saStarted = false     ; SeverActions has freed the companion and started the fight
+float saStartedAt = 0.0
 bool uiShowing = false     ; the offer, or the record, is up on the page
 bool recordShowing = false ; it is the record (the Duel Record power), not an offer
 
@@ -108,6 +112,10 @@ Function SetupUI()
     if RecordPower && !player.HasSpell(RecordPower)
         player.AddSpell(RecordPower, false)
     endif
+    ; SeverActions' Duel API, for companions (TTY_SA). Events last one load, like Magelight's.
+    TTY_SA.Refresh()
+    RegisterForModEvent("SeverActions_DuelStarted", "OnSADuelStarted")
+    RegisterForModEvent("SeverActions_DuelEnded", "OnSADuelEnded")
     if !UseMagelight || UseMagelight.GetValue() <= 0
         return
     endif
@@ -201,6 +209,19 @@ Function Decide(int aiChoice)
         Debug.Notification("No duel: " + reason + ".")
         return
     endif
+    saHandle = 0
+    saStarted = false
+    if IsFollower(akSpeaker) && TTY_SA.Available()
+        ; A companion: SeverActions frees them to fight and keeps its guards off the pair. It must
+        ; free them before anyone starts the fight, so StartFight leaves that to it.
+        saHandle = TTY_SABridge.Begin(Game.GetPlayer(), akSpeaker, MaxDuelSeconds + 60.0)
+        if saHandle <= 0
+            saHandle = 0
+            OpponentAlias.Clear()
+            Debug.Notification("No duel: SeverActions couldn't start it.")
+            return
+        endif
+    endif
     StartFight(akSpeaker)
 EndFunction
 
@@ -266,6 +287,40 @@ Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSe
     endif
 EndFunction
 
+; SeverActions_DuelStarted / _DuelEnded (DUEL_API.md). Functions, not Events, as for Magelight. Only
+; the handle tells duels apart: every mod's duels send these.
+Function OnSADuelStarted(string asEventName, string asWhy, float afHandle, Form akSender)
+    if saHandle > 0 && afHandle as int == saHandle
+        saStarted = true
+        saStartedAt = Utility.GetCurrentRealTime()
+        Actor npc = opponent
+        if npc
+            npc.StartCombat(Game.GetPlayer())
+        endif
+    endif
+EndFunction
+
+; SeverActions ended it before we did ("ended" is our own Duel_End, which clears saHandle first).
+Function OnSADuelEnded(string asEventName, string asWhy, float afHandle, Form akSender)
+    if saHandle <= 0 || afHandle as int != saHandle
+        return
+    endif
+    saHandle = 0
+    saStarted = false
+    if GetState() != "Fighting"
+        return
+    endif
+    if asWhy == "calledoff"
+        EndDuel(None, None, "interrupted")
+    elseif asWhy == "expired"
+        EndDuel(None, None, "time")
+    elseif asWhy == "death"
+        EndDuel(None, None, "broken")
+    elseif asWhy == "load"
+        EndDuel(None, None, "reloaded")
+    endif
+EndFunction
+
 ; TTY_RecordPowerEffect: the Duel Record power. Not mid-duel or while a duel offer is up.
 Function ShowRecord()
     if GetState() != "" || StorageUtil.GetIntValue(None, "TTY_NpcAsking", 0) == 1
@@ -313,7 +368,13 @@ Function OnGameLoad()
     ; GetCurrentRealTime restarts with every game launch, so a duel saved mid-fight restarts its clock.
     startTime = Utility.GetCurrentRealTime()
     sheathedSince = 0.0
-    if GetState() == "Fighting"
+    if GetState() == "Fighting" && saHandle > 0
+        ; SeverActions ends every duel a loaded save carries, and the companion is back with their
+        ; framework: this one cannot go on. Not a result.
+        saHandle = 0
+        saStarted = false
+        EndDuel(None, None, "reloaded")
+    elseif GetState() == "Fighting"
         RegisterForSingleUpdate(TickSeconds)
     elseif GetState() == ""
         ; A crash or a quit mid-duel never reaches FinishDuel. Undo what it would have undone.
@@ -340,7 +401,8 @@ string Function CannotDuelReason(Actor akNpc)
         return "no opponent"
     elseif akNpc.IsChild()
         return "not with a child"
-    elseif IsFollower(akNpc)
+    elseif IsFollower(akNpc) && !TTY_SA.Available()
+        ; With SeverActions' Duel API a companion can duel (Decide); without it they won't fight you.
         return akNpc.GetDisplayName() + " is your companion. Dismiss them first to duel"
     elseif akNpc.IsInCombat() || player.IsInCombat()
         return "someone is already fighting"
@@ -410,10 +472,16 @@ Function StartFight(Actor akNpc)
     ; Someone who likes the player drops a StartCombat against them at once. Tested live on a
     ; dismissed follower (rank 3), 2026-10-23: with both ranks set to 0 they fought every sample of
     ; two 10 s runs; at rank 3 they never did. Neutral NPCs (guards) are at 0 already.
-    LowerRanks(akNpc)
-    Embolden(akNpc)
+    ; With SeverActions (a companion), it frees them, sets their courage and adds the brawl faction
+    ; itself, and restores only what it changed: doing it here too would undo the wrong values.
+    ; Tested live 2026-10-27: a companion at rank 3 fought once SeverActions freed her.
+    bool sa = saHandle > 0
+    if !sa
+        LowerRanks(akNpc)
+        Embolden(akNpc)
+    endif
 
-    brawlFactionUsed = BrawlFaction && UseBrawlFaction && UseBrawlFaction.GetValue() > 0
+    brawlFactionUsed = !sa && BrawlFaction && UseBrawlFaction && UseBrawlFaction.GetValue() > 0
     if brawlFactionUsed
         akNpc.AddToFaction(BrawlFaction)
         player.AddToFaction(BrawlFaction)
@@ -441,7 +509,10 @@ Function StartFight(Actor akNpc)
     Utility.Wait(LeadInSeconds)
     ; The NPC can be deleted during the wait (a despawning leveled actor); OnUpdate then ends it.
     if GetState() == "Fighting" && akNpc
-        akNpc.StartCombat(player)
+        ; SeverActions starts a companion's fight itself, once they are free (OnSADuelStarted).
+        if !sa
+            akNpc.StartCombat(player)
+        endif
         RegisterForSingleUpdate(TickSeconds)
     endif
 EndFunction
@@ -499,7 +570,19 @@ State Fighting
         ; the player, once a second (SeverActions re-issues StartCombat for the same reason). An
         ; opponent who stays out of it is not going to fight: call the duel off rather than retry for
         ; three minutes (0.2.0 did, and a follower drew and sheathed about 70 times).
-        if now - startTime > LeadInSeconds + 0.5
+        ; A companion's fight starts when SeverActions says so: until then, hands off.
+        float engageFrom = startTime
+        if saHandle > 0
+            engageFrom = saStartedAt
+            if !saStarted
+                engageFrom = now
+                if now - startTime > SAStartSeconds
+                    EndDuel(None, None, "would_not_fight")
+                    return
+                endif
+            endif
+        endif
+        if now - engageFrom > LeadInSeconds + 0.5
             if opponent.IsInCombat() && opponent.GetCombatTarget() == player
                 disengagedSince = 0.0
             else
@@ -556,6 +639,13 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     Actor player = Game.GetPlayer()
     Actor npc = opponent
     TTY_Records.Result(player, npc, akWinner, asHow)
+    ; SeverActions stops the fight and gives a companion back to their framework.
+    if saHandle > 0
+        int h = saHandle
+        saHandle = 0
+        saStarted = false
+        TTY_SABridge.End(h)
+    endif
     ; After an outside attack the player may still be fighting someone else: leave that alone.
     bool calmPlayer = asHow != "interrupted"
 
@@ -779,6 +869,13 @@ EndFunction
 ; Puts everything back, from any state. Runs on first start and when the quest is restarted.
 Function Reset()
     UnregisterForUpdate()
+    if saHandle > 0
+        ; Only reached with SeverActions present: saHandle is never set without it.
+        int h = saHandle
+        saHandle = 0
+        TTY_SABridge.End(h)
+    endif
+    saStarted = false
     if OpponentAlias
         Actor npc = OpponentAlias.GetActorReference()
         if npc

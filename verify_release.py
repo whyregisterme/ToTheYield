@@ -49,6 +49,8 @@ expected = [
     'Scripts/TTY_UI.pex',
     'Scripts/TTY_Records.pex',
     'Scripts/TTY_RecordPowerEffect.pex',
+    'Scripts/TTY_SA.pex',
+    'Scripts/TTY_SABridge.pex',
     'Magelight/ToTheYield/manifest.json',
     'Magelight/ToTheYield/views/prompt/index.html',
     'ToTheYield_DISTR.ini',
@@ -68,6 +70,9 @@ expected = [
 for n in names:
     if n.lower() in ('scripts/magelight.pex', 'source/scripts/magelight.psc'):
         problems.append(f'ships a Magelight file it must not: {n}')
+    # SeverActions' scripts are compiled against (TTY_SABridge), never shipped: SeverActions installs them.
+    if n.lower().startswith(('scripts/severactions', 'source/scripts/severactions')):
+        problems.append(f'ships a SeverActions file it must not: {n}')
 
 # Magelight refuses a manifest whose modId is not its folder's name, so only ours, matching.
 ml = 'Magelight/'

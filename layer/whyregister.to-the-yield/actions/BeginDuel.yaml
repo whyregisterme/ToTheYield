@@ -22,14 +22,6 @@ eligibilityRules:
         arguments: ["currentActor"]
         comparisonOperator: "=="
         expectedValue: false
-      # Current followers won't fight the player (tested); TTY_Main refuses them too, with a hint.
-      # Rank, not is_in_faction: a dismissed follower keeps the faction at rank -1, which
-      # is_in_faction still counts (0.2.2 blocked dismissed followers that way). get_faction_rank
-      # gives -1 for both "dismissed" and "never a follower"; current followers are 0 or more.
-      - decoratorName: get_faction_rank
-        arguments: ["currentActor", "CurrentFollowerFaction"]
-        comparisonOperator: "<"
-        expectedValue: 0
       # One duel of any kind at a time: not while an NPC duel (TTY_NpcDuel) is being fought.
       - decoratorName: papyrus_util
         arguments: ["GetIntValue", "none", "TTY_NpcDuelActive", 0]
@@ -41,6 +33,22 @@ eligibilityRules:
         comparisonOperator: "=="
         expectedValue: 0
     logicalOperator: AND
+    required: true
+  # A current follower only with SeverActions' Duel API (TTY_SA sets TTY_SADuels on every load):
+  # without it they won't fight the player (tested), and TTY_Main refuses them too, with a hint.
+  # Rank, not is_in_faction: a dismissed follower keeps the faction at rank -1, which is_in_faction
+  # still counts (0.2.2 blocked dismissed followers that way). get_faction_rank gives -1 for both
+  # "dismissed" and "never a follower"; current followers are 0 or more.
+  - conditions:
+      - decoratorName: get_faction_rank
+        arguments: ["currentActor", "CurrentFollowerFaction"]
+        comparisonOperator: "<"
+        expectedValue: 0
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_SADuels", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: OR
     required: true
 
 eventString: "{{ actor_name }} agreed to a duel with {{ player.name }}."

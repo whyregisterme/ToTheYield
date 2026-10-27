@@ -27,12 +27,6 @@ eligibilityRules:
         arguments: ["currentActor"]
         comparisonOperator: "=="
         expectedValue: false
-      # Followers are not tested in NPC duels yet. Rank, not is_in_faction: dismissed followers
-      # keep the faction at rank -1.
-      - decoratorName: get_faction_rank
-        arguments: ["currentActor", "CurrentFollowerFaction"]
-        comparisonOperator: "<"
-        expectedValue: 0
       # One challenge at a time: hidden while one waits on an answer.
       - decoratorName: papyrus_util
         arguments: ["GetIntValue", "none", "TTY_NpcChallengePending", 0]
@@ -48,6 +42,20 @@ eligibilityRules:
         comparisonOperator: "=="
         expectedValue: 0
     logicalOperator: AND
+    required: true
+  # A current follower challenges only with SeverActions' Duel API (TTY_SA sets TTY_SADuels): it
+  # frees them to fight (tested live 2026-10-27, two followers). Rank, not is_in_faction: dismissed
+  # followers keep the faction at rank -1.
+  - conditions:
+      - decoratorName: get_faction_rank
+        arguments: ["currentActor", "CurrentFollowerFaction"]
+        comparisonOperator: "<"
+        expectedValue: 0
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_SADuels", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: OR
     required: true
 
 defaultPriority: 5

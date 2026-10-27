@@ -64,6 +64,7 @@ float Property SeparatedDistance = 3000.0 AutoReadOnly
 float Property RecoverHealthFraction = 0.3 AutoReadOnly
 float Property RekickSeconds = 1.0 AutoReadOnly
 float Property EngageGraceSeconds = 4.0 AutoReadOnly
+float Property SAStartSeconds = 15.0 AutoReadOnly        ; SeverActions' same-side duel must start within this
 float Property ChallengeSeconds = 60.0 AutoReadOnly       ; an unanswered challenge lapses after this
 int Property CooldownSeconds = 120 AutoReadOnly          ; before ChallengeDuel is offered again
 
@@ -76,6 +77,9 @@ float lastRekick = 0.0
 float disengagedSince = 0.0
 float challengeTime = 0.0
 int uiView = 0             ; the Magelight page this session, 0 = message boxes
+int saHandle = 0           ; SeverActions' duel (a same-side pair, TTY_SA), 0 = To the Yield's own
+bool saStarted = false     ; SeverActions has started the fight
+float saStartedAt = 0.0
 bool uiShowing = false     ; this script's card is up on the page
 
 ; States: "" (no duel), "Asking" (the player decides), "Fighting", "Ending".
@@ -90,6 +94,9 @@ EndEvent
 Function SetupUI()
     uiView = 0
     uiShowing = false
+    ; SeverActions' Duel API, for two NPCs of the same side (TTY_SA). Events last one load.
+    RegisterForModEvent("SeverActions_DuelStarted", "OnSADuelStarted")
+    RegisterForModEvent("SeverActions_DuelEnded", "OnSADuelEnded")
     if !UseMagelight || UseMagelight.GetValue() <= 0
         return
     endif
@@ -284,6 +291,40 @@ Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSe
     endif
 EndFunction
 
+; SeverActions_DuelStarted / _DuelEnded (DUEL_API.md). TTY_Main hears the same events and keeps its
+; own handle: only the handle tells duels apart.
+Function OnSADuelStarted(string asEventName, string asWhy, float afHandle, Form akSender)
+    if saHandle > 0 && afHandle as int == saHandle
+        saStarted = true
+        saStartedAt = Utility.GetCurrentRealTime()
+        if duelA && duelB
+            duelA.StartCombat(duelB)
+            duelB.StartCombat(duelA)
+        endif
+    endif
+EndFunction
+
+; SeverActions ended it before we did ("ended" is our own Duel_End, which clears saHandle first).
+Function OnSADuelEnded(string asEventName, string asWhy, float afHandle, Form akSender)
+    if saHandle <= 0 || afHandle as int != saHandle
+        return
+    endif
+    saHandle = 0
+    saStarted = false
+    if GetState() != "Fighting"
+        return
+    endif
+    if asWhy == "calledoff"
+        EndDuel(None, None, "interrupted")
+    elseif asWhy == "expired"
+        EndDuel(None, None, "time")
+    elseif asWhy == "death"
+        EndDuel(None, None, "broken")
+    elseif asWhy == "load"
+        EndDuel(None, None, "reloaded")
+    endif
+EndFunction
+
 ; DeclineDuel.yaml: the challenged speaker refuses.
 Function DeclineDuel(Actor akDecliner)
     Actor challenger = StorageUtil.GetFormValue(None, "TTY_NpcChallenger") as Actor
@@ -324,24 +365,45 @@ string Function StartDuel(Actor akA, Actor akB)
         Debug.Trace("[TTY] No NPC duel: " + reason)
         return reason
     endif
+    ; Two of the same side won't fight on their own: SeverActions stages it, and sets their courage
+    ; and the brawl faction itself (restoring only what it changed), so those are left to it.
+    saHandle = 0
+    saStarted = false
+    bool sa = akA.GetFactionReaction(akB) >= 2
+    if sa
+        saHandle = TTY_SABridge.Begin(akA, akB, MaxDuelSeconds + 60.0)
+        if saHandle <= 0
+            saHandle = 0
+            DuelistA.Clear()
+            DuelistB.Clear()
+            Debug.Notification("No duel: SeverActions couldn't start it.")
+            return "SeverActions refused"
+        endif
+    endif
     GoToState("Fighting")
     duelA = akA
     duelB = akB
     DuelistA.ForceRefTo(akA)
     DuelistB.ForceRefTo(akB)
 
-    aJoinedBrawl = !akA.IsInFaction(BrawlFaction)
-    if aJoinedBrawl
-        akA.AddToFaction(BrawlFaction)
-    endif
-    bJoinedBrawl = !akB.IsInFaction(BrawlFaction)
-    if bJoinedBrawl
-        akB.AddToFaction(BrawlFaction)
+    aJoinedBrawl = false
+    bJoinedBrawl = false
+    if !sa
+        aJoinedBrawl = !akA.IsInFaction(BrawlFaction)
+        if aJoinedBrawl
+            akA.AddToFaction(BrawlFaction)
+        endif
+        bJoinedBrawl = !akB.IsInFaction(BrawlFaction)
+        if bJoinedBrawl
+            akB.AddToFaction(BrawlFaction)
+        endif
     endif
 
     GuardOn(akA, akB)
-    Embolden(akA)
-    Embolden(akB)
+    if !sa
+        Embolden(akA)
+        Embolden(akB)
+    endif
 
     string a = akA.GetDisplayName()
     string b = akB.GetDisplayName()
@@ -361,8 +423,11 @@ string Function StartDuel(Actor akA, Actor akB)
     Utility.Wait(LeadInSeconds)
     ; Either can be deleted during the wait; OnUpdate then ends it.
     if GetState() == "Fighting" && akA && akB
-        akA.StartCombat(akB)
-        akB.StartCombat(akA)
+        ; SeverActions starts a same-side pair's fight itself (OnSADuelStarted).
+        if !sa
+            akA.StartCombat(akB)
+            akB.StartCombat(akA)
+        endif
         RegisterForSingleUpdate(TickSeconds)
     endif
     return ""
@@ -385,8 +450,9 @@ string Function CannotDuelReason(Actor akA, Actor akB)
         return "not with a child"
     elseif akA.IsInCombat() || akB.IsInCombat()
         return "someone is already fighting"
-    elseif akA.GetFactionReaction(akB) >= 2
-        ; Ally or friend: the same group. They will not fight (tested).
+    elseif akA.GetFactionReaction(akB) >= 2 && !TTY_SA.Available()
+        ; Ally or friend: the same group. They will not fight (tested), unless SeverActions' Duel
+        ; API stages it (StartDuel).
         return akA.GetDisplayName() + " and " + akB.GetDisplayName() + " are on the same side"
     elseif akA.GetDistance(akB) > MaxStartDistance
         return "too far apart"
@@ -418,7 +484,12 @@ Function OnGameLoad()
     startTime = Utility.GetCurrentRealTime()
     lastRekick = startTime
     disengagedSince = 0.0
-    if GetState() == "Fighting"
+    if GetState() == "Fighting" && saHandle > 0
+        ; SeverActions ends every duel a loaded save carries: this one cannot go on. Not a result.
+        saHandle = 0
+        saStarted = false
+        EndDuel(None, None, "reloaded")
+    elseif GetState() == "Fighting"
         RegisterForSingleUpdate(TickSeconds)
     else
         ; The real-time clock restarted, so a waiting challenge can no longer lapse: drop it.
@@ -452,9 +523,21 @@ State Fighting
         ; Keep each on the other. A pair that stays out of it is not going to fight: call it off.
         bool aOn = duelA.IsInCombat() && duelA.GetCombatTarget() == duelB
         bool bOn = duelB.IsInCombat() && duelB.GetCombatTarget() == duelA
+        ; A SeverActions fight starts when it says so: until then, hands off.
+        float engageFrom = startTime
+        if saHandle > 0
+            engageFrom = saStartedAt
+            if !saStarted
+                engageFrom = now
+                if now - startTime > SAStartSeconds
+                    EndDuel(None, None, "would_not_fight")
+                    return
+                endif
+            endif
+        endif
         if aOn && bOn
             disengagedSince = 0.0
-        elseif now - startTime > LeadInSeconds + 0.5
+        elseif now - engageFrom > LeadInSeconds + 0.5
             if disengagedSince == 0.0
                 disengagedSince = now
             elseif now - disengagedSince >= EngageGraceSeconds
@@ -516,6 +599,12 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     Actor a = duelA
     Actor b = duelB
     TTY_Records.Result(a, b, akWinner, asHow)
+    if saHandle > 0
+        int h = saHandle
+        saHandle = 0
+        saStarted = false
+        TTY_SABridge.End(h)
+    endif
     ; 1. Stop the fight, and again after each wait below (TTY_Main found once was not enough).
     StopBoth(a, b)
     LeaveBrawl(a, b)
@@ -687,6 +776,12 @@ EndFunction
 
 ; Puts everything back, from any state. Runs on first start and when the quest is restarted.
 Function Reset()
+    if saHandle > 0
+        int h = saHandle
+        saHandle = 0
+        TTY_SABridge.End(h)
+    endif
+    saStarted = false
     UnregisterForUpdate()
     Actor a = None
     Actor b = None

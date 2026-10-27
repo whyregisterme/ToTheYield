@@ -16,6 +16,9 @@ the duelists (and anyone watching) remember who won.
   everything else works; bystanders just aren't shielded from stray blows.
 - Optional: **Magelight UI 1.3.0 or newer** (SeverActions installs it too). With it, the
   confirmations appear on a proper page that names who is involved; without it, as message boxes.
+- Optional: **SeverActions 4.6.0 or newer**, for its Duel API. With it you can duel your own
+  companions, and NPCs of the same side (two of your followers, two guards of one hold) can duel each
+  other. Without it those are refused, and everything else works the same.
 
 ## Install
 
@@ -44,8 +47,10 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 - **A duel also ends** if you walk away, never draw your weapon, someone outside the duel attacks
   either of you, or 3 minutes pass. Your followers are kept out of it. If your opponent is the one
   who leaves (through a door, say), the duel is simply called off.
-- **Friends can duel you; followers need dismissing first.** A current follower won't fight you (their
-  follower status stops it), so dismiss them, then duel. If an opponent still won't actually fight
+- **Friends can duel you; followers need SeverActions or dismissing.** A current follower won't fight
+  you on their own (their follower status stops it). With SeverActions 4.6.0 or newer, its Duel API
+  frees them for the duel and gives them back to you afterwards, still following. Without it, dismiss
+  them, then duel. If an opponent still won't actually fight
   (stays out of combat for about 4 seconds), the duel is called off instead of dragging on.
 - You can't duel while either of you is already in combat or on horseback, against someone hostile to you, or with a child. Your opponent has to be close by.
 
@@ -60,9 +65,10 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 - **The fight.** Same rules as yours: nobody dies, the loser kneels and yields, and either duelist
   can concede. It ends in a draw after 3 minutes, and is called off if the two drift far apart,
   never really fight, or someone else joins in.
-- **Who can't.** Two members of the same group (two guards of the same hold, say) won't fight each
-  other, so that pair is refused. Your followers don't issue challenges; a follower being
-  challenged hasn't been tested, and since followers won't fight you, they may not fight here either.
+- **Same side.** Two members of the same group (two guards of the same hold, two of your followers)
+  won't fight each other on their own. With SeverActions 4.6.0 or newer its Duel API stages the
+  fight, and your followers can issue challenges too; without it, that pair is refused and followers
+  don't challenge.
 - **One duel at a time.** While any duel is on, yours or theirs, no other can start.
 
 ### Duel records
@@ -107,6 +113,8 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 | `scripts/TTY_BystanderGhostEffect.psc` | Turns a nearby bystander ghost for the length of a duel |
 | `scripts/TTY_Records.psc` | Duel records: every result and spoken refusal, kept on the actors. Its header lists the keys |
 | `scripts/TTY_RecordPowerEffect.psc` | The Duel Record power |
+| `scripts/TTY_SA.psc` | Whether SeverActions' Duel API is there; names no SeverActions script, so it loads without it |
+| `scripts/TTY_SABridge.psc` | Every SeverActions call, made only after `TTY_SA` says it's there. SeverActions' scripts are compiled against, never shipped |
 | `scripts/TTY_UI.psc` | Every Magelight UI call, behind a check that Magelight is installed, new enough and ready |
 | `magelight/ToTheYield/` | The Magelight page: both confirmations and the record, in Windows' own fonts (nothing bundled) |
 | `imports/` | Magelight's Papyrus header, compiled against and never shipped (Magelight installs its own) |
@@ -122,6 +130,14 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
   afterwards. The original is kept in the save, so a reload or quest restart always restores it.
 - Followers: the follower factions keep them from fighting you whatever their rank, and SeverActions'
   friendly-fire guard stops any fight with its companions. Dismissed, they duel like anyone else.
+- SeverActions' Duel API (4.6.0+): used only for what To the Yield can't stage itself, a duel with
+  your active companion and a duel between two NPCs of the same side. SeverActions frees a companion
+  (teammate flag, follower frameworks), sets both duelists' courage and the brawl faction, keeps its
+  friendly-fire guard and your other followers off the pair, and puts all of it back when the duel
+  ends. To the Yield waits for SeverActions to say the fight is on, then runs the duel exactly as
+  usual: the yield, the protection, the records. A save loaded mid-duel ends such a duel, unrecorded.
+  Tested live: you against a companion, two Whiterun guards, and two of your followers, with a third
+  follower staying out.
 - Courage: many civilians are Cowardly and run from any fight. For the duel, each duelist's
   Confidence is raised to Foolhardy and put back afterwards (the original is kept in the save, like
   the relationship rank). Tested live: two cowardly Dawnstar locals then fought it out.
