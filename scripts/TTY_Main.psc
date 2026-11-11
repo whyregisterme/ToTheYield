@@ -1,11 +1,15 @@
 Scriptname TTY_Main extends Quest
-{To the Yield: a formal duel with real weapons, fought until one side yields or goes down.
+{To the Yield: a formal duel with weapons and magic, fought until one side yields or goes down.
 
  Nobody dies. The opponent is put in the Opponent alias, which is flagged Essential, so at zero
  health they kneel in bleedout. The player is made essential for the duration: at zero health the
  player drops, and the opponent stops attacking (both verified by hand in game, 2026-10-23). This
  script then ends combat, gives whoever went down enough health to stand, puts every flag back the
  way it was, and tells SkyrimNet how the duel ended.
+
+ When the opponent yields (goes down, or concedes in words) the player answers: accept, keep fighting
+ (they get up and it goes on), or fight to the death. Only that last one lets anybody die: it clears the
+ alias and the player's flag, and is never offered for an NPC who was essential before the duel.
 
  SkyrimNet calls BeginDuel and YieldDuel (layer actions/BeginDuel.yaml and YieldDuel.yaml).
  The player confirms the duel on a Magelight UI page when Magelight is installed (TTY_UI), else in
@@ -23,6 +27,10 @@ Scriptname TTY_Main extends Quest
      TTY_RankPlayerToNpc    int, global          the player's rank toward that NPC before the duel
      TTY_BraveNpc           form, global         the NPC whose Confidence a duel raised
      TTY_NpcConfidence      float, global        that NPC's base Confidence before the duel
+     TTY_YieldRefused       int, global          how many of the opponent's offered yields the player refused
+     TTY_ToTheDeath         int, global          1 once the player made it a duel to the death
+     TTY_LawlessNpc         form, global         the NPC a sanctioned duel to the death took out of their crime faction
+     TTY_NpcCrimeFaction    form, global         that crime faction
 
  Stuck? From the console: stopquest TTY_Quest, then startquest TTY_Quest. OnInit runs again
  and Reset puts everything back. If you are still immortal after that: setessential 7 0}
@@ -62,6 +70,22 @@ GlobalVariable Property UseMagelight Auto
 {TTY_UseMagelight, default 1. 0 = always the message box, even with Magelight UI installed. Console:
  set TTY_UseMagelight to 0. Turning it back on takes effect at the next load.}
 
+Message Property YieldMsg Auto
+{"Your opponent yields." with I accept your yield / Keep fighting / Until one of us is dead.}
+
+Message Property YieldMercyMsg Auto
+{YieldMsg without the duel to the death, for an opponent who can't be killed or one already in it:
+ I accept your yield / Keep fighting.}
+
+Message Property DeathConfirmMsg Auto
+{"A duel to the death..." with Back / To the death. Back comes first, so Enter is the safe answer.}
+
+GlobalVariable Property SanctionedDeath Auto
+{TTY_SanctionedDeath, default 0: killing an opponent in a duel to the death is murder (tested live
+ 2026-11-10: a Dawnstar guard's death cost 1000 bounty; the brawl faction covers blows, not a kill). At 1
+ the opponent leaves their crime faction for the rest of the duel, so no hold's law counts the kill.
+ Console: set TTY_SanctionedDeath to 1.}
+
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.25 AutoReadOnly
 float Property LeadInSeconds = 1.5 AutoReadOnly          ; "the duel begins" to the first blow
@@ -75,6 +99,8 @@ int Property CooldownSeconds = 120 AutoReadOnly          ; before BeginDuel is o
 float Property RekickSeconds = 1.0 AutoReadOnly          ; between StartCombat retries
 float Property EngageGraceSeconds = 4.0 AutoReadOnly     ; opponent out of the fight this long = called off
 float Property SAStartSeconds = 15.0 AutoReadOnly        ; SeverActions' companion duel must start within this
+float Property YieldAgainSeconds = 15.0 AutoReadOnly     ; after a refused yield, before a spoken one counts again
+int Property StandUpSeconds = 30 AutoReadOnly            ; a refused opponent has this long to get back up
 
 Actor opponent = None
 bool brawlFactionUsed = false
@@ -93,8 +119,16 @@ bool saStarted = false     ; SeverActions has freed the companion and started th
 float saStartedAt = 0.0
 bool uiShowing = false     ; the offer, or the record, is up on the page
 bool recordShowing = false ; it is the record (the Duel Record power), not an offer
+bool yieldShowing = false  ; it is the opponent's yield, waiting on the player's answer
+bool npcKillable = false   ; the opponent was not essential before the duel made them so
+bool toTheDeath = false    ; the player refused a yield and chose a duel to the death
+string yieldHow = ""       ; "downed" or "conceded": how the opponent yielded
+bool yieldPending = false  ; the yield is still waiting on the player's answer
+float yieldAt = 0.0        ; when, so the time spent answering is not duel time
+float yieldAgainAt = 0.0   ; before this, a spoken yield is the refused one again and is ignored
 
-; States: "" (no duel), "Asking" (the offer is up), "Fighting", "Ending" (cleaning up; no new duel can start).
+; States: "" (no duel), "Asking" (the offer is up), "Fighting", "Yielding" (the opponent yielded and the
+; player is answering, or the opponent is getting back up), "Ending" (cleaning up; no new duel can start).
 
 Event OnInit()
     Reset()
@@ -107,6 +141,7 @@ Function SetupUI()
     uiView = 0
     uiShowing = false
     recordShowing = false
+    yieldShowing = false
     ; The Duel Record power works with or without Magelight (a message box then).
     Actor player = Game.GetPlayer()
     if RecordPower && !player.HasSpell(RecordPower)
@@ -149,6 +184,23 @@ Function BeginDuel(Actor akSpeaker)
         return
     endif
 
+    ; Before the alias makes them essential: an NPC a quest keeps alive stays out of a duel to the death.
+    npcKillable = !akSpeaker.IsEssential()
+    if !npcKillable
+        ; Seen live 2026-11-10: a generic Nord (base not essential, in no alias afterwards) was essential
+        ; here. Name whatever holds them, so the log can say which mod protects them.
+        string held = ""
+        Alias[] aliases = PO3_SKSEFunctions.GetRefAliases(akSpeaker)
+        int i = 0
+        while aliases && i < aliases.Length
+            if aliases[i]
+                held += " " + PO3_SKSEFunctions.GetFormEditorID(aliases[i].GetOwningQuest()) + "." + aliases[i].GetName()
+            endif
+            i += 1
+        endwhile
+        Debug.Trace("[TTY] " + akSpeaker.GetDisplayName() + " is essential before the duel (base " \
+            + akSpeaker.GetActorBase().IsEssential() + ", aliases:" + held + "): no duel to the death")
+    endif
     OpponentAlias.ForceRefTo(akSpeaker)
     ; Asking holds off any other duel until the player answers, which on the page comes later (OnUiChoice).
     GoToState("Asking")
@@ -231,7 +283,8 @@ EndFunction
 ; on a non-native script, and in a Skyrim .pex an event is only a function; SKSE calls it by name.
 ; ---------------------------------------------------------------------------------------------
 
-; The offer's buttons: "fight", "refuse", "quiet".
+; The offer's buttons: "fight", "refuse", "quiet". The yield's: "accept", "keep", "death" (the page asks
+; "to the death?" itself and only sends "death" once the player confirms).
 Function OnUiChoice(string asEventName, string asChoice, float afView, Form akSender)
     if uiView == 0 || afView as int != uiView || !uiShowing
         return
@@ -241,6 +294,17 @@ Function OnUiChoice(string asEventName, string asChoice, float afView, Form akSe
     if recordShowing
         ; The record card's only button is Close.
         recordShowing = false
+        return
+    endif
+    if yieldShowing
+        yieldShowing = false
+        if asChoice == "keep"
+            AnswerYield(1)
+        elseif asChoice == "death"
+            ConfirmDeath(true)
+        else
+            AnswerYield(0)
+        endif
         return
     endif
     if asChoice == "fight"
@@ -264,6 +328,12 @@ Function OnUiExited(string asEventName, string asModId, float afView, Form akSen
         recordShowing = false
         return
     endif
+    if yieldShowing
+        ; The yield is accepted: the one answer that can't hurt anyone.
+        yieldShowing = false
+        AnswerYield(0)
+        return
+    endif
     Decide(2)
 EndFunction
 
@@ -281,6 +351,9 @@ Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSe
         if recordShowing
             recordShowing = false
             Debug.MessageBox(TTY_Records.PlayerText())
+        elseif yieldShowing
+            yieldShowing = false
+            AskYieldWithBox()
         elseif GetState() == "Asking"
             AskWithBox()
         endif
@@ -350,6 +423,9 @@ EndFunction
 Function OnOpponentDown()
 EndFunction
 
+Function OfferYield(string asHow)
+EndFunction
+
 Function OnOutsideAttack(Actor akAttacker)
 EndFunction
 
@@ -367,8 +443,17 @@ Function OnGameLoad()
     StorageUtil.UnsetIntValue(None, "TTY_Asking")
     ; GetCurrentRealTime restarts with every game launch, so a duel saved mid-fight restarts its clock.
     startTime = Utility.GetCurrentRealTime()
+    yieldAt = startTime
     sheathedSince = 0.0
-    if GetState() == "Fighting" && saHandle > 0
+    if GetState() == "Yielding" && saHandle > 0
+        saHandle = 0
+        saStarted = false
+        EndDuel(None, None, "reloaded")
+    elseif GetState() == "Yielding" && yieldPending
+        ; Saved with the yield unanswered: ask again. (Saved while they were getting up, RefuseYield's
+        ; wait carries on by itself.)
+        ShowYield()
+    elseif GetState() == "Fighting" && saHandle > 0
         ; SeverActions ends every duel a loaded save carries, and the companion is back with their
         ; framework: this one cannot go on. Not a result.
         saHandle = 0
@@ -382,6 +467,7 @@ Function OnGameLoad()
         GuardOff(None, None)
         RestoreRanks()
         RestoreConfidence()
+        RestoreCrimeFaction()
     endif
 EndFunction
 
@@ -490,12 +576,19 @@ Function StartFight(Actor akNpc)
     GuardOn(akNpc, None)
 
     string names = akNpc.GetDisplayName() + " and " + player.GetDisplayName()
+    toTheDeath = false
+    yieldPending = false
+    yieldAgainAt = 0.0
     StorageUtil.SetIntValue(None, "TTY_Active", 1)
     StorageUtil.SetIntValue(akNpc, "TTY_Opponent", 1)
-    StorageUtil.SetStringValue(None, "TTY_Status", names + " are fighting a formal duel with real weapons, to the yield. Nobody is meant to die.")
+    ; Facts, not values: "formal", "nobody is meant to die" and the like had NPCs judge whatever the
+    ; duel turned into (seen live 2026-11-10). What the fight means is left to their own profiles.
+    StorageUtil.SetStringValue(None, "TTY_Status", names + " are fighting a duel with weapons and magic, until someone goes down, or offers a yield and the other accepts it.")
+    StorageUtil.UnsetIntValue(None, "TTY_YieldRefused")
+    StorageUtil.UnsetIntValue(None, "TTY_ToTheDeath")
     ; 'custom' rejects a plain string (SkyrimNet logs "Invalid value for field 'data'"). persistent_generic
     ; takes JSON with a "line" field, the form other mods' events pass validation with, and is kept as a memory.
-    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(names + " began a duel to the yield, with real weapons.") + "\"}", akNpc, player)
+    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(names + " began a duel with weapons and magic.") + "\"}", akNpc, player)
 
     PlayerAliasScript.WatchDuel(akNpc)
     Debug.Notification("Duel with " + akNpc.GetDisplayName() + ". Sheathe your weapon to yield.")
@@ -522,11 +615,17 @@ State Fighting
         Actor player = Game.GetPlayer()
         float now = Utility.GetCurrentRealTime()
 
-        if !opponent || opponent.IsDead()
+        if opponent && opponent.IsDead() && toTheDeath
+            EndDuel(player, opponent, "killed")
+            return
+        elseif !opponent || opponent.IsDead()
             EndDuel(None, None, "broken")
             return
-        elseif opponent.IsBleedingOut()
-            EndDuel(player, opponent, "downed")
+        elseif opponent.IsBleedingOut() && !toTheDeath
+            ; To the death, kneeling is no yield: the brawl faction still drops a beaten fighter into
+            ; bleedout, and asking again each time left no way to finish them (seen live 2026-11-10).
+            ; Only a spoken concession is still asked about.
+            OfferYield("downed")
             return
         elseif player.IsBleedingOut() || player.GetActorValue("Health") <= 1.0
             ; An essential player does not play the bleedout kneel: they drop at zero health.
@@ -583,7 +682,8 @@ State Fighting
             endif
         endif
         if now - engageFrom > LeadInSeconds + 0.5
-            if opponent.IsInCombat() && opponent.GetCombatTarget() == player
+            ; Kneeling to the death is out of the fight but not refusing it.
+            if (opponent.IsInCombat() && opponent.GetCombatTarget() == player) || opponent.IsBleedingOut()
                 disengagedSince = 0.0
             else
                 if disengagedSince == 0.0
@@ -592,7 +692,7 @@ State Fighting
                     EndDuel(None, None, "would_not_fight")
                     return
                 endif
-                if now - lastRekick >= RekickSeconds
+                if now - lastRekick >= RekickSeconds && !opponent.IsDead()
                     lastRekick = now
                     opponent.StartCombat(player)
                 endif
@@ -603,13 +703,23 @@ State Fighting
     EndEvent
 
     Function YieldDuel(Actor akSpeaker)
-        if akSpeaker && akSpeaker == opponent
-            EndDuel(Game.GetPlayer(), opponent, "conceded")
+        if akSpeaker && akSpeaker == opponent && Utility.GetCurrentRealTime() >= yieldAgainAt
+            OfferYield("conceded")
         endif
     EndFunction
 
     Function OnOpponentDown()
-        EndDuel(Game.GetPlayer(), opponent, "downed")
+        OfferYield("downed")
+    EndFunction
+
+    ; The opponent yields: the fight stops until the player answers (ShowYield, then AnswerYield).
+    Function OfferYield(string asHow)
+        GoToState("Yielding")
+        UnregisterForUpdate()
+        yieldHow = asHow
+        yieldAt = Utility.GetCurrentRealTime()
+        yieldPending = true
+        ShowYield()
     EndFunction
 
     ; Followers are teammates and are only kept out (KeepFollowersOut). Anyone else hitting either
@@ -628,8 +738,196 @@ State Fighting
     EndFunction
 EndState
 
+; The fight is paused on the opponent's yield. Anyone outside the duel joining in still calls it off.
+State Yielding
+    Function OnOutsideAttack(Actor akAttacker)
+        if akAttacker && akAttacker != opponent && akAttacker != Game.GetPlayer() && !akAttacker.IsPlayerTeammate()
+            yieldPending = false
+            EndDuel(None, None, "interrupted")
+        endif
+    EndFunction
+
+    Function EndDuel(Actor akWinner, Actor akLoser, string asHow)
+        GoToState("Ending")
+        UnregisterForUpdate()
+        FinishDuel(akWinner, akLoser, asHow)
+    EndFunction
+EndState
+
 State Ending
 EndState
+
+; ---------------------------------------------------------------------------------------------
+; The opponent's yield, and the player's answer
+; ---------------------------------------------------------------------------------------------
+
+; A duel to the death is offered only for an opponent who can die: not one a quest keeps alive
+; (npcKillable), and not a companion, whom SeverActions keeps essential for the whole duel.
+bool Function CanDuelToDeath()
+    return npcKillable && !toTheDeath && saHandle <= 0
+EndFunction
+
+; Asks the player, on the page or in a box. The game is paused either way.
+Function ShowYield()
+    Actor npc = opponent
+    if !npc
+        yieldPending = false
+        EndDuel(None, None, "broken")
+        return
+    endif
+    if UiReady()
+        string name = npc.GetDisplayName()
+        string note = ""
+        if toTheDeath
+            note = "This is a duel to the death. Accept, and it ends here."
+        elseif saHandle > 0
+            note = "A companion can't be killed in a duel."
+        elseif !npcKillable
+            note = name + " can't be killed: the world still needs them."
+        endif
+        ; 1 or 0, never true/false: Papyrus keeps one string table that ignores case, so a "true" can come
+        ; back as another script's "True", which JSON.parse rejects (seen live 2026-11-10: the whole card
+        ; lost its data and the death button with it).
+        string death = "0"
+        if CanDuelToDeath()
+            death = "1"
+        endif
+        string murder = "1"
+        if SanctionedDeath && SanctionedDeath.GetValue() > 0
+            murder = "0"
+        endif
+        uiShowing = true
+        yieldShowing = true
+        string json = "{\"name\":\"" + JsonEscape(name) + "\",\"how\":\"" + yieldHow + "\",\"death\":" + death \
+            + ",\"murder\":" + murder + ",\"note\":\"" + JsonEscape(note) + "\"}"
+        if TTY_UI.Open(uiView, "ttyYield", json)
+            return
+        endif
+        uiShowing = false
+        yieldShowing = false
+    endif
+    AskYieldWithBox()
+EndFunction
+
+Function AskYieldWithBox()
+    Actor npc = opponent
+    if npc
+        ; The box can't name anyone, so the notification just before it does.
+        Debug.Notification(npc.GetDisplayName() + " offers a yield")
+    endif
+    ; Buttons, in this order in both boxes: 0 I accept your yield, 1 Keep fighting, 2 Until one of us is dead.
+    if CanDuelToDeath()
+        AnswerYield(YieldMsg.Show())
+    else
+        AnswerYield(YieldMercyMsg.Show())
+    endif
+EndFunction
+
+; 0 accept, 1 keep fighting, 2 to the death (the box path: asks to confirm first).
+Function AnswerYield(int aiChoice)
+    if GetState() != "Yielding" || !yieldPending
+        return
+    endif
+    if aiChoice == 1
+        RefuseYield(false)
+    elseif aiChoice == 2 && CanDuelToDeath()
+        ; Buttons: 0 Back, 1 To the death.
+        if DeathConfirmMsg.Show() == 1
+            ConfirmDeath(true)
+        else
+            AskYieldWithBox()
+        endif
+    else
+        yieldPending = false
+        EndDuel(Game.GetPlayer(), opponent, yieldHow)
+    endif
+EndFunction
+
+Function ConfirmDeath(bool abSure)
+    if GetState() != "Yielding" || !yieldPending
+        return
+    endif
+    if abSure && CanDuelToDeath()
+        RefuseYield(true)
+    else
+        yieldPending = false
+        EndDuel(Game.GetPlayer(), opponent, yieldHow)
+    endif
+EndFunction
+
+; "Keep fighting", or a duel to the death: whoever is down gets up, and the fight goes on.
+Function RefuseYield(bool abToDeath)
+    yieldPending = false
+    Actor player = Game.GetPlayer()
+    Actor npc = opponent
+    if !npc || npc.IsDead()
+        EndDuel(None, None, "broken")
+        return
+    endif
+    string p = player.GetDisplayName()
+    string n = npc.GetDisplayName()
+    ; The prompt (0680) reads these, so the opponent's own terms change with the fight.
+    StorageUtil.SetIntValue(None, "TTY_YieldRefused", StorageUtil.GetIntValue(None, "TTY_YieldRefused", 0) + 1)
+    if abToDeath
+        toTheDeath = true
+        StorageUtil.SetIntValue(None, "TTY_ToTheDeath", 1)
+        StorageUtil.SetStringValue(None, "TTY_Status", n + " and " + p + " are fighting to the death. " + p + " refused " + n + "'s yield.")
+        SkyrimNetApi.DirectNarration("*" + p + " refuses " + n + "'s yield. The duel is to the death now.*", npc, player)
+    else
+        ; Said to the opponent, who answers it: refused, and pushed back up to go on.
+        StorageUtil.SetStringValue(None, "TTY_Status", n + " and " + p + " are fighting a duel with weapons and magic. " + n + " offered a yield and " + p + " refused it, so it goes on.")
+        SkyrimNetApi.DirectNarration("*" + p + " won't accept " + n + "'s yield and pushes " + n + " to get back up and keep fighting. The duel goes on.*", npc, player)
+    endif
+    ; A spoken yield straight after this would only be the same one again.
+    yieldAgainAt = Utility.GetCurrentRealTime() + YieldAgainSeconds
+    SkyrimNetApi.SetActionCooldown("YieldDuel", YieldAgainSeconds as int)
+
+    ; Down: back on their feet first, still protected, so nothing kills them on the ground. In combat
+    ; an essential NPC stays down fEssentialDeathTime (20 s); out of it, fEssentialNonCombatDeathTime
+    ; (0 s). Seen live 2026-11-10: a guard left in the fight was still kneeling after 10 s. So the fight
+    ; stops while they rise, as FinishDuel does, and starts again below.
+    if npc.IsBleedingOut()
+        StopTheFight(npc, true)
+        npc.RestoreActorValue("Health", npc.GetBaseActorValue("Health") * RecoverHealthFraction)
+        int waited = 0
+        while npc.IsBleedingOut() && waited < StandUpSeconds && GetState() == "Yielding"
+            Utility.Wait(1.0)
+            waited += 1
+            if waited % 3 == 0
+                StopTheFight(npc, true)
+            endif
+        endwhile
+    endif
+    if GetState() != "Yielding"
+        ; Ended while they were getting up (an outside attack).
+        return
+    endif
+    if npc.IsBleedingOut()
+        ; Still down: they couldn't go on, so the yield stands.
+        Debug.Trace("[TTY] " + n + " did not get back up after a refused yield: the yield stands")
+        EndDuel(player, npc, yieldHow)
+        return
+    endif
+    if abToDeath
+        ; Only what this duel added comes off: the alias's essential flag and the player's. Opponent
+        ; still holds the NPC, for the cleanup.
+        OpponentAlias.Clear()
+        RestorePlayerEssential()
+        if SanctionedDeath && SanctionedDeath.GetValue() > 0
+            Outlaw(npc)
+        endif
+    endif
+
+    ; The time spent answering is not duel time.
+    float now = Utility.GetCurrentRealTime()
+    startTime += now - yieldAt
+    disengagedSince = 0.0
+    sheathedSince = 0.0
+    lastRekick = now
+    GoToState("Fighting")
+    npc.StartCombat(player)
+    RegisterForSingleUpdate(TickSeconds)
+EndFunction
 
 ; Nothing differs while the offer is up; the state itself keeps other duels out (CannotDuelReason).
 State Asking
@@ -665,6 +963,8 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     ; The alias (the NPC's protection) stays filled until step 4.
     StorageUtil.UnsetIntValue(None, "TTY_Active")
     StorageUtil.UnsetStringValue(None, "TTY_Status")
+    StorageUtil.UnsetIntValue(None, "TTY_YieldRefused")
+    StorageUtil.UnsetIntValue(None, "TTY_ToTheDeath")
     if npc
         StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
     endif
@@ -697,6 +997,7 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     StopTheFight(npc, calmPlayer)
     RestoreRanks()
     RestoreConfidence()
+    RestoreCrimeFaction()
     RestorePlayerEssential()
     int waited = 0
     while npc && npc.IsBleedingOut() && waited < 10
@@ -711,6 +1012,8 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     endif
     opponent = None
     brawlFactionUsed = false
+    toTheDeath = false
+    yieldPending = false
     GoToState("")
 EndFunction
 
@@ -765,7 +1068,9 @@ string Function Outcome(Actor akNpc, Actor akWinner, Actor akLoser, string asHow
     if akNpc
         n = akNpc.GetDisplayName()
     endif
-    if asHow == "downed" && akWinner && akLoser
+    if asHow == "killed"
+        return "*" + n + " dies by " + p + "'s hand. The duel to the death is over.*"
+    elseif asHow == "downed" && akWinner && akLoser
         return "*" + akLoser.GetDisplayName() + " goes down and yields. " + akWinner.GetDisplayName() + " has won the duel.*"
     elseif asHow == "player_yielded"
         return "*" + p + " sheathes their weapon and yields. " + n + " has won the duel.*"
@@ -799,6 +1104,28 @@ Function Embolden(Actor akNpc)
     StorageUtil.SetFormValue(None, "TTY_BraveNpc", akNpc)
     StorageUtil.SetFloatValue(None, "TTY_NpcConfidence", akNpc.GetBaseActorValue("Confidence"))
     akNpc.SetActorValue("Confidence", 4.0)
+EndFunction
+
+; A sanctioned duel to the death: a crime is reported to the victim's crime faction, so without one
+; there is nobody to report the killing to. Kept in the co-save, as the ranks are.
+Function Outlaw(Actor akNpc)
+    Faction crime = akNpc.GetCrimeFaction()
+    if !crime
+        return
+    endif
+    StorageUtil.SetFormValue(None, "TTY_LawlessNpc", akNpc)
+    StorageUtil.SetFormValue(None, "TTY_NpcCrimeFaction", crime)
+    akNpc.SetCrimeFaction(None)
+EndFunction
+
+Function RestoreCrimeFaction()
+    Actor npc = StorageUtil.GetFormValue(None, "TTY_LawlessNpc") as Actor
+    Faction crime = StorageUtil.GetFormValue(None, "TTY_NpcCrimeFaction") as Faction
+    if npc && crime
+        npc.SetCrimeFaction(crime)
+    endif
+    StorageUtil.UnsetFormValue(None, "TTY_LawlessNpc")
+    StorageUtil.UnsetFormValue(None, "TTY_NpcCrimeFaction")
 EndFunction
 
 Function RestoreConfidence()
@@ -877,7 +1204,11 @@ Function Reset()
     endif
     saStarted = false
     if OpponentAlias
+        ; A duel to the death has already cleared the alias: opponent still names the NPC.
         Actor npc = OpponentAlias.GetActorReference()
+        if !npc
+            npc = opponent
+        endif
         if npc
             npc.StopCombat()
             StorageUtil.UnsetIntValue(npc, "TTY_Opponent")
@@ -897,11 +1228,17 @@ Function Reset()
     StorageUtil.UnsetIntValue(None, "TTY_Active")
     StorageUtil.UnsetIntValue(None, "TTY_Asking")
     StorageUtil.UnsetStringValue(None, "TTY_Status")
+    StorageUtil.UnsetIntValue(None, "TTY_YieldRefused")
+    StorageUtil.UnsetIntValue(None, "TTY_ToTheDeath")
     GuardOff(None, None)
     RestorePlayerEssential()
     RestoreRanks()
     RestoreConfidence()
+    RestoreCrimeFaction()
     opponent = None
     brawlFactionUsed = false
+    toTheDeath = false
+    yieldPending = false
+    yieldShowing = false
     GoToState("")
 EndFunction

@@ -2,9 +2,9 @@
 # Nothing starts until the target answers with AcceptDuel, and then the player confirms in a box.
 name: ChallengeDuel
 description: >-
-  Challenge someone present (not {{ player.name }}) to a formal duel: real weapons, fought until
-  one of you yields or goes down, and nobody dies. Use it when, in this line, you dare them to
-  settle something now (a grudge, an insult, a test of skill) and wait for their answer.
+  Challenge someone present (not {{ player.name }}) to a duel: weapons and magic, whatever each of you fights with, until one of you
+  yields or goes down. Use it when, in this line, you dare them to settle something now and wait
+  for their answer.
   Not for teasing, boasts, or a fight proposed for later. To duel {{ player.name }}, use
   BeginDuel instead.
 

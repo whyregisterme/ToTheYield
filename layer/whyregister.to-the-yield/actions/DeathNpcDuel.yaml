@@ -1,0 +1,30 @@
+# The duelist a yield was offered to refuses it and wants a fight to the death. The player allows or stops it.
+name: DeathNpcDuel
+description: >-
+  Refuse the yield your opponent just offered and make this a fight to the death: either of you can die.
+
+questEditorId: TTY_NpcDuelQuest
+scriptName: TTY_NpcDuel
+executionFunctionName: DeathNpcDuel
+
+# Function DeathNpcDuel(Actor akSpeaker)
+parameterMapping:
+  - type: speaker
+
+eligibilityRules:
+  - conditions:
+      # TTY_NpcYieldOffer is 1 on a duelist only while a yield offered to them waits on their answer.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "TTY_NpcYieldOffer", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+      # TTY_NpcDeathOK is 1 only when neither duelist is someone a quest keeps alive.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "TTY_NpcDeathOK", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: AND
+    required: true
+
+eventString: "{{ actor_name }} refused the yield and wants a fight to the death."
+defaultPriority: 7

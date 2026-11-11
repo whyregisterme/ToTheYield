@@ -1,0 +1,25 @@
+# The duelist a yield was offered to refuses it and makes the other fight on. A fall still ends it.
+name: RefuseNpcYield
+description: >-
+  Refuse the yield your opponent just offered and make them get up and keep fighting. The duel still ends at a yield you accept or a fall.
+
+questEditorId: TTY_NpcDuelQuest
+scriptName: TTY_NpcDuel
+executionFunctionName: RefuseNpcYield
+
+# Function RefuseNpcYield(Actor akSpeaker)
+parameterMapping:
+  - type: speaker
+
+eligibilityRules:
+  - conditions:
+      # TTY_NpcYieldOffer is 1 on a duelist only while a yield offered to them waits on their answer.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "currentActor", "TTY_NpcYieldOffer", 0]
+        comparisonOperator: "=="
+        expectedValue: 1
+    logicalOperator: AND
+    required: true
+
+eventString: "{{ actor_name }} refused the yield."
+defaultPriority: 7

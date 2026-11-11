@@ -1,6 +1,6 @@
 # To the Yield
 
-A SkyrimNet add-on for formal duels: real weapons, fought until one side yields or goes down.
+A SkyrimNet add-on for formal duels: weapons and magic, fought until one side yields or goes down.
 Nobody dies.
 
 Talk an NPC into a duel, or let one challenge you. NPCs can also challenge each other while you
@@ -44,6 +44,15 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
 - **Yielding.** Sheathe your weapon for about 4 seconds. The NPC can also concede on their own.
 - **Nobody dies.** Your opponent kneels when beaten. You drop at zero health and they stop attacking.
   Afterwards, whoever went down gets back up with some health.
+- **When your opponent yields, you answer** (the fight waits; Escape on the page accepts):
+  - **I accept your yield** ends the duel, as before.
+  - **Keep fighting, we're not done yet**: they get back up and the duel goes on. They hear that you
+    refused. A spoken yield in the next 15 seconds is ignored; going down again always counts.
+  - **No. Until one of us is dead**, after a second confirmation, drops the protection on **both** of
+    you: either of you can die. Not offered for anyone a quest keeps alive, or for a companion
+    (SeverActions keeps them essential). Kneeling no longer counts as a yield then, so you can finish
+    them; a yield said out loud can still be accepted. **Killing them is murder**: expect the hold's
+    bounty, unless death duels are sanctioned (see Console levers).
 - **A duel also ends** if you walk away, never draw your weapon, someone outside the duel attacks
   either of you, or 3 minutes pass. Your followers are kept out of it. If your opponent is the one
   who leaves (through a door, say), the duel is simply called off.
@@ -62,9 +71,18 @@ version 1.70, so it loads on SE 1.5.97 as well as AE, without needing BEES.
   - **Allow** lets the duel go ahead.
   - **Stop it** calls it off, and the two hear that you stopped it.
   - **Stop it silently** calls it off without telling them (Escape does the same on the page).
-- **The fight.** Same rules as yours: nobody dies, the loser kneels and yields, and either duelist
-  can concede. It ends in a draw after 3 minutes, and is called off if the two drift far apart,
-  never really fight, or someone else joins in.
+- **The fight.** Same rules as yours: the loser kneels and yields. It ends in a draw after 3
+  minutes, and is called off if the two drift far apart, never really fight, or someone else joins in.
+- **A yield said out loud is an offer**, and the other duelist answers it in their own words (the
+  fight waits meanwhile; no answer in 30 seconds and the yield stands):
+  - **Accept** ends the duel.
+  - **Refuse** makes them get up and fight on. Going down still ends it, so pride can't loop forever.
+  - **To the death** asks you first, as the duel itself did: **Allow** takes away both fighters'
+    protection, **Stop it** has you step in and the yield stands, **Stop it silently** lets it stand
+    without mentioning you (Escape does the same on the page). Only offered when neither is someone
+    a quest keeps alive, and never in a same-side duel staged by SeverActions.
+  - In a fight to the death, kneeling no longer ends it. If the winner doesn't finish a kneeling
+    opponent within 10 seconds, they've spared them and won.
 - **Same side.** Two members of the same group (two guards of the same hold, two of your followers)
   won't fight each other on their own. With SeverActions 4.6.0 or newer its Duel API stages the
   fight, and your followers can issue challenges too; without it, that pair is refused and followers
@@ -96,6 +114,9 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
   controller). Set it back to `1` and load a save to bring the page back.
 - `set TTY_UseBrawlFaction to 0`: keeps you and your opponent out of the vanilla brawl faction. Default
   1. Without it, your opponent's friends (fellow guards, the Companions) join in on their side.
+- `set TTY_SanctionedDeath to 1`: sanctioned duels to the death. Your opponent leaves their crime
+  faction for the duel, so no hold counts the killing. Default 0 (it's murder). Untested against
+  every witness: a bystander's own faction may still report it.
 - If a duel ever gets stuck: `stopquest TTY_Quest`, then `startquest TTY_Quest`. If you're
   still unkillable afterwards: `setessential 7 0`.
 - A stuck NPC duel: `stopquest TTY_NpcDuelQuest`, then `startquest TTY_NpcDuelQuest`.
@@ -119,8 +140,8 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 | `magelight/ToTheYield/` | The Magelight page: both confirmations and the record, in Windows' own fonts (nothing bundled) |
 | `imports/` | Magelight's Papyrus header, compiled against and never shipped (Magelight installs its own) |
 | `ToTheYield_DISTR.ini` | SPID gives every NPC the (conditional) bystander ability |
-| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: two quests (one per duel kind, Essential aliases), two confirm boxes, the bystander ability, the Duel Record power, a faction, a keyword, three globals |
-| `layer/whyregister.to-the-yield/` | The SkyrimNet layer: `BeginDuel`, `YieldDuel`, `ChallengeDuel`, `AcceptDuel`, `DeclineDuel` and `YieldNpcDuel` actions, a prompt that only renders while a duel is on, and one with the speaker's own record (nothing for someone without one) |
+| `spriggit/ToTheYield/` | The plugin as Spriggit JSON: two quests (one per duel kind, Essential aliases), the confirm and yield boxes, the bystander ability, the Duel Record power, a faction, a keyword, three globals |
+| `layer/whyregister.to-the-yield/` | The SkyrimNet layer: `BeginDuel`, `YieldDuel`, `ChallengeDuel`, `AcceptDuel`, `DeclineDuel`, `YieldNpcDuel`, `AcceptNpcYield`, `RefuseNpcYield` and `DeathNpcDuel` actions, a prompt that only renders while a duel is on, and one with the speaker's own record (nothing for someone without one) |
 
 - Protection: the NPC sits in an Essential quest alias, so they go into bleedout instead of dying.
   The player is set essential only for the duel. The vanilla brawl faction alone does **not** stop

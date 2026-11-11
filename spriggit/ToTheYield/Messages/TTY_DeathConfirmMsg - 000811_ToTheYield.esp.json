@@ -1,0 +1,27 @@
+{
+  "FormKey": "000811:ToTheYield.esp",
+  "EditorID": "TTY_DeathConfirmMsg",
+  "Description": {
+    "TargetLanguage": "English",
+    "Value": "A duel to the death.\n\nYour opponent can die, and so can you. Nothing will stop it.\n\nKilling them is murder in the eyes of the law, unless death duels are sanctioned (set TTY_SanctionedDeath to 1)."
+  },
+  "INAM": "0x00000000",
+  "Quest": "000800:ToTheYield.esp",
+  "Flags": [
+    "MessageBox"
+  ],
+  "MenuButtons": [
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Back"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "To the death"
+      }
+    }
+  ]
+}

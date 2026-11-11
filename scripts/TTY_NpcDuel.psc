@@ -28,6 +28,16 @@ Scriptname TTY_NpcDuel extends Quest
      TTY_NpcDuelFoe      string, on each NPC  the other duelist's name, for the duelist's prompt
      TTY_NpcBrave        form list, global    the duelists whose Confidence a duel raised
      TTY_NpcConfidence   float, on each NPC   that duelist's base Confidence before the duel
+     TTY_NpcYieldOffer   int, on the winner   1 while a yield offered to them waits on their answer
+     TTY_NpcYieldFrom    string, on winner    who offered it, for their prompt
+     TTY_NpcDeathOK      int, on the winner   1 when a fight to the death is one of their answers
+     TTY_NpcRefused      int, on the loser    how many of their offered yields were refused
+     TTY_NpcToTheDeath   int, global          1 once the player allowed a fight to the death
+
+ A spoken yield is an offer (YieldNpcDuel): the winner answers with AcceptNpcYield, RefuseNpcYield (they
+ fight on; a fall still ends it) or DeathNpcDuel, which the player allows or stops (NpcDeathMsg). Ria and
+ Njada in simulation, 2026-11-10: with "refuse" meaning only death, a winner who wanted "get up" chose it
+ anyway; with "fight on" offered, no winner chose death in ten takes. So both answers exist.
 
  Stuck? From the console: stopquest TTY_NpcDuelQuest, then startquest TTY_NpcDuelQuest.}
 
@@ -55,6 +65,10 @@ Faction Property DuelistFaction Auto
 GlobalVariable Property UseMagelight Auto
 {TTY_UseMagelight, shared with TTY_Main: 0 = always the message box. Takes effect at the next load.}
 
+Message Property NpcDeathMsg Auto
+{"One of them refuses the other's yield and wants a fight to the death." with Allow / Stop it /
+ Stop it silently: the player decides, as for the duel itself.}
+
 ; Tuning. Times are real seconds.
 float Property TickSeconds = 0.5 AutoReadOnly
 float Property LeadInSeconds = 1.0 AutoReadOnly
@@ -67,6 +81,9 @@ float Property EngageGraceSeconds = 4.0 AutoReadOnly
 float Property SAStartSeconds = 15.0 AutoReadOnly        ; SeverActions' same-side duel must start within this
 float Property ChallengeSeconds = 60.0 AutoReadOnly       ; an unanswered challenge lapses after this
 int Property CooldownSeconds = 120 AutoReadOnly          ; before ChallengeDuel is offered again
+float Property AnswerSeconds = 30.0 AutoReadOnly         ; an offered yield the winner never answers stands
+float Property YieldAgainSeconds = 15.0 AutoReadOnly     ; after "fight on", before a spoken yield counts again
+float Property SparedSeconds = 10.0 AutoReadOnly         ; kneeling this long to the death, unfinished: spared
 
 Actor duelA = None
 Actor duelB = None
@@ -81,8 +98,18 @@ int saHandle = 0           ; SeverActions' duel (a same-side pair, TTY_SA), 0 = 
 bool saStarted = false     ; SeverActions has started the fight
 float saStartedAt = 0.0
 bool uiShowing = false     ; this script's card is up on the page
+bool deathShowing = false  ; it is the "to the death?" card, not the duel offer
+bool aKillable = false     ; neither was essential before the duel made them so: a death is possible
+bool bKillable = false
+bool toTheDeath = false    ; the player allowed a fight to the death
+Actor yieldWinner = None   ; the duelist a yield was offered to, and who offered it
+Actor yieldLoser = None
+float offeredAt = 0.0
+float yieldAgainAt = 0.0
+float kneelSince = 0.0     ; to the death, when the kneeling one went down
 
-; States: "" (no duel), "Asking" (the player decides), "Fighting", "Ending".
+; States: "" (no duel), "Asking" (the player decides), "Fighting", "Offered" (a yield waits on the
+; winner's answer), "AskingDeath" (the player decides on a fight to the death), "Ending".
 
 Event OnInit()
     Reset()
@@ -94,6 +121,7 @@ EndEvent
 Function SetupUI()
     uiView = 0
     uiShowing = false
+    deathShowing = false
     ; SeverActions' Duel API, for two NPCs of the same side (TTY_SA). Events last one load.
     RegisterForModEvent("SeverActions_DuelStarted", "OnSADuelStarted")
     RegisterForModEvent("SeverActions_DuelEnded", "OnSADuelEnded")
@@ -154,7 +182,7 @@ Function ChallengeDuel(Actor akChallenger, Actor akTarget)
     StorageUtil.SetIntValue(akTarget, "TTY_NpcChallenged", 1)
     StorageUtil.SetStringValue(akTarget, "TTY_NpcChallengerName", akChallenger.GetDisplayName())
     challengeTime = Utility.GetCurrentRealTime()
-    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(akChallenger.GetDisplayName() + " challenged " + akTarget.GetDisplayName() + " to a duel to the yield, with real weapons.") + "\"}", akChallenger, akTarget)
+    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(akChallenger.GetDisplayName() + " challenged " + akTarget.GetDisplayName() + " to a duel with weapons and magic.") + "\"}", akChallenger, akTarget)
     RegisterForSingleUpdate(ChallengeSeconds + 1.0)
 EndFunction
 
@@ -162,7 +190,16 @@ EndFunction
 Function AcceptDuel(Actor akAccepter)
     Actor challenger = StorageUtil.GetFormValue(None, "TTY_NpcChallenger") as Actor
     if !akAccepter || !challenger || StorageUtil.GetIntValue(akAccepter, "TTY_NpcChallenged", 0) != 1
-        Debug.Trace("[TTY] AcceptDuel: no challenge is waiting on this speaker")
+        string who = "nobody"
+        string waits = "no one"
+        Actor target = StorageUtil.GetFormValue(None, "TTY_NpcChallengeTarget") as Actor
+        if akAccepter
+            who = akAccepter.GetDisplayName() + " (" + akAccepter.GetFormID() + ")"
+        endif
+        if target
+            waits = target.GetDisplayName() + " (" + target.GetFormID() + ")"
+        endif
+        Debug.Trace("[TTY] AcceptDuel: no challenge is waiting on this speaker: " + who + "; one waits on " + waits)
         return
     endif
     ClearChallenge()
@@ -176,6 +213,9 @@ Function AcceptDuel(Actor akAccepter)
         return
     endif
 
+    ; Before the aliases make them essential: anyone a quest keeps alive stays out of a fight to the death.
+    aKillable = !challenger.IsEssential()
+    bKillable = !akAccepter.IsEssential()
     DuelistA.ForceRefTo(challenger)
     DuelistB.ForceRefTo(akAccepter)
     ; Asking holds off any other duel until the player answers, which on the page comes later (OnUiChoice).
@@ -254,6 +294,17 @@ Function OnUiChoice(string asEventName, string asChoice, float afView, Form akSe
     endif
     uiShowing = false
     TTY_UI.Close(uiView)
+    if deathShowing
+        deathShowing = false
+        if asChoice == "allow"
+            DecideDeath(0)
+        elseif asChoice == "stop"
+            DecideDeath(1)
+        else
+            DecideDeath(2)
+        endif
+        return
+    endif
     if asChoice == "allow"
         Decide(0)
     elseif asChoice == "stop"
@@ -271,6 +322,12 @@ Function OnUiExited(string asEventName, string asModId, float afView, Form akSen
     endif
     uiShowing = false
     TTY_UI.Close(uiView)
+    if deathShowing
+        ; The yield stands, silently: the answer that can't kill anyone.
+        deathShowing = false
+        DecideDeath(2)
+        return
+    endif
     Decide(2)
 EndFunction
 
@@ -285,7 +342,10 @@ Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSe
     uiView = 0
     if wasShowing
         TTY_UI.Close(afView as int)
-        if GetState() == "Asking"
+        if deathShowing
+            deathShowing = false
+            AskDeathWithBox()
+        elseif GetState() == "Asking"
             AskWithBox()
         endif
     endif
@@ -338,8 +398,22 @@ Function DeclineDuel(Actor akDecliner)
     endif
 EndFunction
 
-; YieldNpcDuel.yaml: a duelist concedes in words. Only does anything while Fighting.
+; YieldNpcDuel.yaml: a duelist offers their yield. Only does anything while Fighting (OfferNpcYield).
 Function YieldNpcDuel(Actor akSpeaker)
+EndFunction
+
+; The winner's answers to an offered yield (AcceptNpcYield / RefuseNpcYield / DeathNpcDuel.yaml). Only
+; State Offered does anything with them.
+Function AcceptNpcYield(Actor akSpeaker)
+EndFunction
+
+Function RefuseNpcYield(Actor akSpeaker)
+EndFunction
+
+Function DeathNpcDuel(Actor akSpeaker)
+EndFunction
+
+Function OfferNpcYield(Actor akWinner, Actor akLoser)
 EndFunction
 
 Function ClearChallenge()
@@ -408,12 +482,12 @@ string Function StartDuel(Actor akA, Actor akB)
     string a = akA.GetDisplayName()
     string b = akB.GetDisplayName()
     StorageUtil.SetIntValue(None, "TTY_NpcDuelActive", 1)
-    StorageUtil.SetStringValue(None, "TTY_NpcStatus", a + " and " + b + " are fighting a formal duel with real weapons, to the yield. Nobody is meant to die.")
+    StorageUtil.SetStringValue(None, "TTY_NpcStatus", a + " and " + b + " are fighting a duel with weapons and magic, until one of them yields or goes down.")
     StorageUtil.SetIntValue(akA, "TTY_NpcDuelist", 1)
     StorageUtil.SetIntValue(akB, "TTY_NpcDuelist", 1)
     StorageUtil.SetStringValue(akA, "TTY_NpcDuelFoe", b)
     StorageUtil.SetStringValue(akB, "TTY_NpcDuelFoe", a)
-    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(a + " and " + b + " began a duel to the yield, with real weapons.") + "\"}", akA, akB)
+    SkyrimNetApi.RegisterEvent("persistent_generic", "{\"line\":\"" + JsonEscape(a + " and " + b + " began a duel with weapons and magic.") + "\"}", akA, akB)
 
     startTime = Utility.GetCurrentRealTime()
     lastRekick = startTime
@@ -484,12 +558,16 @@ Function OnGameLoad()
     startTime = Utility.GetCurrentRealTime()
     lastRekick = startTime
     disengagedSince = 0.0
-    if GetState() == "Fighting" && saHandle > 0
+    offeredAt = startTime
+    if (GetState() == "Fighting" || GetState() == "Offered" || GetState() == "AskingDeath") && saHandle > 0
         ; SeverActions ends every duel a loaded save carries: this one cannot go on. Not a result.
         saHandle = 0
         saStarted = false
         EndDuel(None, None, "reloaded")
-    elseif GetState() == "Fighting"
+    elseif GetState() == "AskingDeath"
+        ; Saved while the player decided (the page is gone now): the yield stands, silently.
+        DecideDeath(2)
+    elseif GetState() == "Fighting" || GetState() == "Offered"
         RegisterForSingleUpdate(TickSeconds)
     else
         ; The real-time clock restarted, so a waiting challenge can no longer lapse: drop it.
@@ -503,8 +581,30 @@ EndFunction
 State Fighting
     Event OnUpdate()
         float now = Utility.GetCurrentRealTime()
-        if !duelA || !duelB || duelA.IsDead() || duelB.IsDead()
+        if toTheDeath && duelA && duelB && duelA.IsDead() != duelB.IsDead()
+            if duelA.IsDead()
+                EndDuel(duelB, duelA, "killed")
+            else
+                EndDuel(duelA, duelB, "killed")
+            endif
+            return
+        elseif !duelA || !duelB || duelA.IsDead() || duelB.IsDead()
             EndDuel(None, None, "broken")
+            return
+        elseif toTheDeath && (duelA.IsBleedingOut() || duelB.IsBleedingOut())
+            ; The brawl faction still drops a beaten fighter to their knees. The other may finish them;
+            ; one who doesn't has spared them. Either way kneeling is not refusing to fight.
+            if kneelSince == 0.0
+                kneelSince = now
+            elseif now - kneelSince >= SparedSeconds
+                if duelA.IsBleedingOut()
+                    EndDuel(duelB, duelA, "spared")
+                else
+                    EndDuel(duelA, duelB, "spared")
+                endif
+                return
+            endif
+            RegisterForSingleUpdate(TickSeconds)
             return
         elseif duelA.IsBleedingOut()
             EndDuel(duelB, duelA, "downed")
@@ -519,6 +619,7 @@ State Fighting
             EndDuel(None, None, "time")
             return
         endif
+        kneelSince = 0.0
 
         ; Keep each on the other. A pair that stays out of it is not going to fight: call it off.
         bool aOn = duelA.IsInCombat() && duelA.GetCombatTarget() == duelB
@@ -557,16 +658,39 @@ State Fighting
         RegisterForSingleUpdate(TickSeconds)
     EndEvent
 
+    ; A spoken yield is an offer: the other duelist answers it (State Offered). Straight after "fight on"
+    ; the same offer again is ignored.
     Function YieldNpcDuel(Actor akSpeaker)
+        if Utility.GetCurrentRealTime() < yieldAgainAt
+            return
+        endif
         if akSpeaker && akSpeaker == duelA
-            EndDuel(duelB, duelA, "conceded")
+            OfferNpcYield(duelB, duelA)
         elseif akSpeaker && akSpeaker == duelB
-            EndDuel(duelA, duelB, "conceded")
+            OfferNpcYield(duelA, duelB)
         endif
     EndFunction
 
+    Function OfferNpcYield(Actor akWinner, Actor akLoser)
+        GoToState("Offered")
+        UnregisterForUpdate()
+        yieldWinner = akWinner
+        yieldLoser = akLoser
+        offeredAt = Utility.GetCurrentRealTime()
+        ; The fight waits on the answer.
+        StopBoth(duelA, duelB)
+        StorageUtil.SetIntValue(akWinner, "TTY_NpcYieldOffer", 1)
+        StorageUtil.SetStringValue(akWinner, "TTY_NpcYieldFrom", akLoser.GetDisplayName())
+        if CanFightToDeath()
+            StorageUtil.SetIntValue(akWinner, "TTY_NpcDeathOK", 1)
+        endif
+        RegisterForSingleUpdate(TickSeconds)
+    EndFunction
+
     Function OnDuelistDown(Actor akDown)
-        if akDown == duelA
+        if toTheDeath
+            return
+        elseif akDown == duelA
             EndDuel(duelB, duelA, "downed")
         elseif akDown == duelB
             EndDuel(duelA, duelB, "downed")
@@ -588,12 +712,213 @@ State Fighting
     EndFunction
 EndState
 
+; A yield waits on the winner's answer. The fight is stopped meanwhile; a fall or anything that would end
+; a duel still ends it, and no answer in AnswerSeconds lets the yield stand.
+State Offered
+    Event OnUpdate()
+        float now = Utility.GetCurrentRealTime()
+        if !duelA || !duelB || duelA.IsDead() || duelB.IsDead()
+            EndDuel(None, None, "broken")
+            return
+        elseif duelA.IsBleedingOut() && !toTheDeath
+            EndDuel(duelB, duelA, "downed")
+            return
+        elseif duelB.IsBleedingOut() && !toTheDeath
+            EndDuel(duelA, duelB, "downed")
+            return
+        elseif duelA.GetDistance(duelB) > SeparatedDistance
+            EndDuel(None, None, "separated")
+            return
+        elseif now - offeredAt > AnswerSeconds
+            EndDuel(yieldWinner, yieldLoser, "stood")
+            return
+        endif
+        StopBoth(duelA, duelB)
+        RegisterForSingleUpdate(TickSeconds)
+    EndEvent
+
+    Function AcceptNpcYield(Actor akSpeaker)
+        if akSpeaker && akSpeaker == yieldWinner
+            EndDuel(yieldWinner, yieldLoser, "accepted")
+        endif
+    EndFunction
+
+    Function RefuseNpcYield(Actor akSpeaker)
+        if akSpeaker && akSpeaker == yieldWinner
+            FightOn()
+        endif
+    EndFunction
+
+    ; Asked for when it is not one of their answers (a quest keeps someone alive): fight on instead.
+    Function DeathNpcDuel(Actor akSpeaker)
+        if akSpeaker && akSpeaker == yieldWinner
+            if CanFightToDeath()
+                AskDeath()
+            else
+                FightOn()
+            endif
+        endif
+    EndFunction
+
+    Function OnDuelistDown(Actor akDown)
+        if toTheDeath
+            return
+        elseif akDown == duelA
+            EndDuel(duelB, duelA, "downed")
+        elseif akDown == duelB
+            EndDuel(duelA, duelB, "downed")
+        endif
+    EndFunction
+
+    Function OnOutsideAttack(Actor akVictim, Actor akAttacker)
+        if akAttacker && akAttacker != duelA && akAttacker != duelB
+            EndDuel(None, None, "interrupted")
+        endif
+    EndFunction
+
+    Function EndDuel(Actor akWinner, Actor akLoser, string asHow)
+        GoToState("Ending")
+        UnregisterForUpdate()
+        FinishDuel(akWinner, akLoser, asHow)
+    EndFunction
+EndState
+
+; The player decides on a fight to the death (the game is paused for the box or the page).
+State AskingDeath
+    Function OnOutsideAttack(Actor akVictim, Actor akAttacker)
+        if akAttacker && akAttacker != duelA && akAttacker != duelB
+            EndDuel(None, None, "interrupted")
+        endif
+    EndFunction
+
+    Function EndDuel(Actor akWinner, Actor akLoser, string asHow)
+        GoToState("Ending")
+        UnregisterForUpdate()
+        FinishDuel(akWinner, akLoser, asHow)
+    EndFunction
+EndState
+
 State Ending
 EndState
 
 ; Nothing differs while the player decides; the state itself keeps other duels out (CannotDuelReason).
 State Asking
 EndState
+
+; ---------------------------------------------------------------------------------------------
+; An offered yield and its answers
+; ---------------------------------------------------------------------------------------------
+
+; Neither was essential before the duel, and the duel is To the Yield's own: SeverActions keeps a
+; same-side pair essential throughout.
+bool Function CanFightToDeath()
+    return aKillable && bKillable && !toTheDeath && saHandle <= 0
+EndFunction
+
+Function ClearOffer()
+    if yieldWinner
+        StorageUtil.UnsetIntValue(yieldWinner, "TTY_NpcYieldOffer")
+        StorageUtil.UnsetStringValue(yieldWinner, "TTY_NpcYieldFrom")
+        StorageUtil.UnsetIntValue(yieldWinner, "TTY_NpcDeathOK")
+    endif
+EndFunction
+
+; The winner refused and makes them fight on. A fall still ends it.
+Function FightOn()
+    Actor w = yieldWinner
+    Actor l = yieldLoser
+    ClearOffer()
+    if !w || !l
+        EndDuel(None, None, "broken")
+        return
+    endif
+    StorageUtil.SetIntValue(l, "TTY_NpcRefused", StorageUtil.GetIntValue(l, "TTY_NpcRefused", 0) + 1)
+    string n = w.GetDisplayName()
+    string m = l.GetDisplayName()
+    if !toTheDeath
+        StorageUtil.SetStringValue(None, "TTY_NpcStatus", m + " and " + n + " are fighting a duel with weapons and magic. " + m + " offered a yield and " + n + " refused it, so it goes on.")
+    endif
+    SkyrimNetApi.DirectNarration("*" + n + " won't accept " + m + "'s yield. The duel goes on.*", w, l)
+    ResumeFight()
+EndFunction
+
+Function ResumeFight()
+    float now = Utility.GetCurrentRealTime()
+    ; The time spent on the yield is not duel time.
+    startTime += now - offeredAt
+    yieldAgainAt = now + YieldAgainSeconds
+    SkyrimNetApi.SetActionCooldown("YieldNpcDuel", YieldAgainSeconds as int)
+    disengagedSince = 0.0
+    lastRekick = now
+    kneelSince = 0.0
+    GoToState("Fighting")
+    if duelA && duelB
+        duelA.StartCombat(duelB)
+        duelB.StartCombat(duelA)
+    endif
+    RegisterForSingleUpdate(TickSeconds)
+EndFunction
+
+; The winner wants a fight to the death: the player allows it or stops it.
+Function AskDeath()
+    GoToState("AskingDeath")
+    UnregisterForUpdate()
+    if UiReady()
+        uiShowing = true
+        deathShowing = true
+        string json = "{\"w\":\"" + JsonEscape(yieldWinner.GetDisplayName()) + "\"" \
+            + ",\"l\":\"" + JsonEscape(yieldLoser.GetDisplayName()) + "\"}"
+        if TTY_UI.Open(uiView, "ttyNpcDeath", json)
+            return
+        endif
+        uiShowing = false
+        deathShowing = false
+    endif
+    AskDeathWithBox()
+EndFunction
+
+Function AskDeathWithBox()
+    if yieldWinner && yieldLoser
+        ; The box can't name anyone, so the notification just before it does.
+        Debug.Notification(yieldWinner.GetDisplayName() + " refuses " + yieldLoser.GetDisplayName() + "'s yield and wants a fight to the death")
+    endif
+    ; Buttons, in NpcDeathMsg's order: 0 Allow, 1 Stop it, 2 Stop it silently.
+    DecideDeath(NpcDeathMsg.Show())
+EndFunction
+
+; 0 Allow: both lose their protection and it goes on. 1 Stop it: the player steps in and the yield
+; stands. 2 Stop it silently: the yield stands, and the player is not mentioned.
+Function DecideDeath(int aiChoice)
+    if GetState() != "AskingDeath"
+        return
+    endif
+    Actor w = yieldWinner
+    Actor l = yieldLoser
+    ClearOffer()
+    if !w || !l || w.IsDead() || l.IsDead()
+        EndDuel(None, None, "broken")
+        return
+    endif
+    string n = w.GetDisplayName()
+    string m = l.GetDisplayName()
+    if aiChoice == 0
+        toTheDeath = true
+        StorageUtil.SetIntValue(None, "TTY_NpcToTheDeath", 1)
+        StorageUtil.SetIntValue(l, "TTY_NpcRefused", StorageUtil.GetIntValue(l, "TTY_NpcRefused", 0) + 1)
+        StorageUtil.SetStringValue(None, "TTY_NpcStatus", n + " and " + m + " are fighting to the death. " + n + " refused " + m + "'s yield.")
+        SkyrimNetApi.DirectNarration("*" + n + " refuses " + m + "'s yield. The duel is to the death now.*", w, l)
+        ; The aliases' essential flags are the only protection the duel added. duelA and duelB still
+        ; name both, for the cleanup.
+        DuelistA.Clear()
+        DuelistB.Clear()
+        ResumeFight()
+    elseif aiChoice == 1
+        SkyrimNetApi.DirectNarration("*" + Game.GetPlayer().GetDisplayName() + " steps in before it can go further. " + m + "'s yield stands, and " + n + " has won the duel.*", w, l)
+        EndDuel(w, l, "stopped")
+    else
+        EndDuel(w, l, "stood")
+    endif
+EndFunction
 
 Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     Actor a = duelA
@@ -614,10 +939,21 @@ Function FinishDuel(Actor akWinner, Actor akLoser, string asHow)
     ClearDuelistKeys(a)
     ClearDuelistKeys(b)
 
-    ; 2. Tell SkyrimNet. A concession needs no narration: YieldNpcDuel.yaml's eventString already
-    ;    recorded it, and the duelist said it out loud.
+    ClearOffer()
+    yieldWinner = None
+    yieldLoser = None
+    toTheDeath = false
+    kneelSince = 0.0
+    yieldAgainAt = 0.0
+    StorageUtil.UnsetIntValue(None, "TTY_NpcToTheDeath")
+    ClearRefused(a)
+    ClearRefused(b)
+
+    ; 2. Tell SkyrimNet. An accepted yield needs no narration: AcceptNpcYield.yaml's eventString
+    ;    already recorded it, and the winner said it out loud. "stopped" was narrated as the player
+    ;    stepped in (DecideDeath).
     SkyrimNetApi.SetActionCooldown("ChallengeDuel", CooldownSeconds)
-    if asHow != "conceded"
+    if asHow != "accepted" && asHow != "stopped"
         SkyrimNetApi.DirectNarration(Outcome(a, b, akWinner, akLoser, asHow), a, b)
     endif
 
@@ -663,6 +999,12 @@ Function LeaveBrawl(Actor a, Actor b)
     endif
     aJoinedBrawl = false
     bJoinedBrawl = false
+EndFunction
+
+Function ClearRefused(Actor akNpc)
+    if akNpc
+        StorageUtil.UnsetIntValue(akNpc, "TTY_NpcRefused")
+    endif
 EndFunction
 
 Function ClearDuelistKeys(Actor akNpc)
@@ -734,6 +1076,12 @@ string Function Outcome(Actor a, Actor b, Actor akWinner, Actor akLoser, string 
     endif
     if asHow == "downed" && akWinner && akLoser
         return "*" + akLoser.GetDisplayName() + " goes down and yields. " + akWinner.GetDisplayName() + " has won the duel.*"
+    elseif asHow == "stood" && akWinner && akLoser
+        return "*" + akLoser.GetDisplayName() + "'s yield stands. " + akWinner.GetDisplayName() + " has won the duel.*"
+    elseif asHow == "killed" && akWinner && akLoser
+        return "*" + akLoser.GetDisplayName() + " dies by " + akWinner.GetDisplayName() + "'s hand. The duel to the death is over.*"
+    elseif asHow == "spared" && akWinner && akLoser
+        return "*" + akLoser.GetDisplayName() + " is down, and " + akWinner.GetDisplayName() + " does not finish it. " + akWinner.GetDisplayName() + " has won the duel.*"
     elseif asHow == "time"
         return "*Neither " + na + " nor " + nb + " can finish it. The duel ends in a draw.*"
     elseif asHow == "separated"
@@ -791,12 +1139,28 @@ Function Reset()
     if DuelistB
         b = DuelistB.GetActorReference()
     endif
+    ; A fight to the death has already released the aliases.
+    if !a
+        a = duelA
+    endif
+    if !b
+        b = duelB
+    endif
     StopBoth(a, b)
     if BrawlFaction
         LeaveBrawl(a, b)
     endif
     ClearDuelistKeys(a)
     ClearDuelistKeys(b)
+    ClearRefused(a)
+    ClearRefused(b)
+    ClearOffer()
+    yieldWinner = None
+    yieldLoser = None
+    toTheDeath = false
+    deathShowing = false
+    kneelSince = 0.0
+    StorageUtil.UnsetIntValue(None, "TTY_NpcToTheDeath")
     GuardOff(a, b)
     if DuelistA
         DuelistA.Clear()

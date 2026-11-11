@@ -3,21 +3,31 @@
   To the Yield: what a duel in progress means, for the two fighters and for anyone watching.
   Renders nothing unless a duel is being fought: TTY_Main sets TTY_Status only then.
   It sits after 0200_combat_status on purpose: that one tells a badly hurt NPC "every hit could be
-  fatal", which is not true in a duel.
+  fatal", which is not true in a duel. Facts only, never what the duel means: "formal", "nobody is
+  meant to die" and "no shame" had NPCs judge a refused yield as cheating (seen live 2026-11-10).
+  TTY_YieldRefused and TTY_ToTheDeath follow the fight, so the opponent's terms change with it.
 #}
 {% set duel = papyrus_util("GetStringValue", "none", "TTY_Status", "") %}
 {% if duel != "" %}
+{% set refused = papyrus_util("GetIntValue", "none", "TTY_YieldRefused", 0) %}
+{% set death = papyrus_util("GetIntValue", "none", "TTY_ToTheDeath", 0) %}
 {% if papyrus_util("GetIntValue", npc.UUID, "TTY_Opponent", 0) == 1 %}
-- You are fighting a formal duel with {{ player.name }} right now: real weapons, to the yield. Nobody is meant to die, whatever your wounds say. Keep words short, the way people talk mid-fight. If you are losing badly, yielding is no shame.
+- You are fighting a duel with {{ player.name }} right now, with weapons and magic, whatever each of you fights with, until someone goes down, or offers a yield and the other accepts it.{% if death != 1 %} A beaten fighter drops to their knees instead of dying.{% endif %} What this fight is to you is yours to decide, from who you are and who {{ player.name }} is to you. Keep words short, the way people talk mid-fight.
+{% if death == 1 %}
+- {{ player.name }} refused your yield and made this a fight to the death. Either of you can die now; nothing will stop it.
+{% elif refused > 0 %}
+- You offered your yield and {{ player.name }} refused it{% if refused > 1 %} ({{ refused }} times now){% endif %}. The fight goes on.
+{% endif %}
 {% else %}
-- {{ duel }} You are watching, not fighting: a short cheer, wince or remark at most, and do not join in.
+- {{ duel }} You are watching, not fighting: a short remark at most, and do not join in.
 {% endif %}
 {% endif %}
 {#
-  NPC against NPC (TTY_NpcDuel). A challenge waiting on this NPC's answer comes first.
+  NPC against NPC (TTY_NpcDuel). A challenge waiting on this NPC's answer comes first. A yield offered
+  to a duelist asks for their answer the same way; TTY_NpcRefused counts on the one who offered it.
 #}
 {% if papyrus_util("GetIntValue", npc.UUID, "TTY_NpcChallenged", 0) == 1 %}
-- ANSWER REQUIRED: {{ papyrus_util("GetStringValue", npc.UUID, "TTY_NpcChallengerName", "someone") }} has just challenged you to a formal duel: real weapons, to the yield, nobody dies. Answer now, in your own words: accept (AcceptDuel) or refuse (DeclineDuel).
+- ANSWER REQUIRED: {{ papyrus_util("GetStringValue", npc.UUID, "TTY_NpcChallengerName", "someone") }} has just challenged you to a duel: weapons and magic, whatever each of you fights with, until one of you yields or goes down. Answer now, in your own words: accept (AcceptDuel) or refuse (DeclineDuel).
 {% endif %}
 {#
   TTY_NpcStatus is set only while an NPC duel is being fought.
@@ -25,9 +35,19 @@
 {% set npcduel = papyrus_util("GetStringValue", "none", "TTY_NpcStatus", "") %}
 {% if npcduel != "" %}
 {% if papyrus_util("GetIntValue", npc.UUID, "TTY_NpcDuelist", 0) == 1 %}
-- You are fighting a formal duel with {{ papyrus_util("GetStringValue", npc.UUID, "TTY_NpcDuelFoe", "your opponent") }} right now: real weapons, to the yield. Nobody is meant to die, whatever your wounds say. Keep words short, the way people talk mid-fight. If you are losing badly, yielding is no shame.
+{% set foe = papyrus_util("GetStringValue", npc.UUID, "TTY_NpcDuelFoe", "your opponent") %}
+{% set ndeath = papyrus_util("GetIntValue", "none", "TTY_NpcToTheDeath", 0) %}
+{% set nrefused = papyrus_util("GetIntValue", npc.UUID, "TTY_NpcRefused", 0) %}
+- You are fighting a duel with {{ foe }} right now, with weapons and magic, whatever each of you fights with, until someone goes down, or offers a yield and the other accepts it.{% if ndeath != 1 %} A beaten fighter drops to their knees instead of dying.{% endif %} What this fight is to you is yours to decide, from who you are and who they are to you. Keep words short, the way people talk mid-fight.
+{% if papyrus_util("GetIntValue", npc.UUID, "TTY_NpcYieldOffer", 0) == 1 %}
+- ANSWER REQUIRED: {{ papyrus_util("GetStringValue", npc.UUID, "TTY_NpcYieldFrom", foe) }} has just offered you a yield. Answer now, in your own words: accept it (AcceptNpcYield), or refuse it and make them fight on (RefuseNpcYield){% if papyrus_util("GetIntValue", npc.UUID, "TTY_NpcDeathOK", 0) == 1 %}, or refuse it and make this a fight to the death (DeathNpcDuel){% endif %}.
+{% elif ndeath == 1 %}
+- This is a fight to the death now. Either of you can die; nothing will stop it.
+{% elif nrefused > 0 %}
+- You offered your yield and {{ foe }} refused it{% if nrefused > 1 %} ({{ nrefused }} times now){% endif %}. The fight goes on.
+{% endif %}
 {% else %}
-- {{ npcduel }} You are watching, not fighting: a short cheer, wince or remark at most, and do not join in.
+- {{ npcduel }} You are watching, not fighting: a short remark at most, and do not join in.
 {% endif %}
 {% endif %}
 {% endif %}

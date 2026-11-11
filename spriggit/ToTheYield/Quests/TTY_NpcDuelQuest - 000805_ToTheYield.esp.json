@@ -40,6 +40,11 @@
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "NpcDeathMsg",
+            "Object": "000813:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
             "Name": "UseMagelight",
             "Object": "00080C:ToTheYield.esp"
           }

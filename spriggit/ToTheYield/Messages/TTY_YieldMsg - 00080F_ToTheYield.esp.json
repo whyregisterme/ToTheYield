@@ -1,0 +1,33 @@
+{
+  "FormKey": "00080F:ToTheYield.esp",
+  "EditorID": "TTY_YieldMsg",
+  "Description": {
+    "TargetLanguage": "English",
+    "Value": "Your opponent offers a yield."
+  },
+  "INAM": "0x00000000",
+  "Quest": "000800:ToTheYield.esp",
+  "Flags": [
+    "MessageBox"
+  ],
+  "MenuButtons": [
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "I accept your yield"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Keep fighting, we're not done yet"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "No. Until one of us is dead"
+      }
+    }
+  ]
+}

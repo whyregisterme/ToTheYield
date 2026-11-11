@@ -2,8 +2,8 @@
 # The player confirms in a message box before anything happens, so a misfire costs one click.
 name: BeginDuel
 description: >-
-  Begin a formal duel with {{ player.name }}: real weapons, fought until one of you yields or goes
-  down, and nobody dies. Use it ONLY when a duel has just been agreed between you and
+  Begin a duel with {{ player.name }}: weapons and magic, whatever each of you fights with, until one of you yields or goes down.
+  Use it ONLY when a duel has just been agreed between you and
   {{ player.name }}: they challenged you and you accept, or you challenged them and they said yes.
   Never use it for an ordinary fight, an ambush, or before {{ player.name }} has agreed.
 
@@ -25,6 +25,12 @@ eligibilityRules:
       # One duel of any kind at a time: not while an NPC duel (TTY_NpcDuel) is being fought.
       - decoratorName: papyrus_util
         arguments: ["GetIntValue", "none", "TTY_NpcDuelActive", 0]
+        comparisonOperator: "=="
+        expectedValue: 0
+      # Not while an NPC challenge waits on an answer: tested live 2026-11-10, Orthjolf answered
+      # Vingalmo's challenge with BeginDuel, which duels the player, not the one who challenged him.
+      - decoratorName: papyrus_util
+        arguments: ["GetIntValue", "none", "TTY_NpcChallengePending", 0]
         comparisonOperator: "=="
         expectedValue: 0
       # TTY_Active is set by TTY_Main while a duel is being fought.

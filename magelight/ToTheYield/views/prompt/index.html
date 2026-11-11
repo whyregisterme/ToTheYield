@@ -7,8 +7,12 @@
   The duel confirmations for To the Yield, on Magelight UI. One page, two cards, two scripts:
     TTY_Main    calls window.ttyOffer(json)    {name}  and hears window.ttyDuelChoice("fight"|"refuse"|"quiet")
     TTY_NpcDuel calls window.ttyNpcOffer(json) {a, b}  and hears window.ttyNpcChoice("allow"|"stop"|"quiet")
+    TTY_NpcDuel calls window.ttyNpcDeath(json) {w, l}  and hears the same (a winner wants a fight to the death)
     TTY_Main    calls window.ttyRecord(json)   {name, w, l, d, foes:[{name, w, l, d, r}]}  and hears
                 window.ttyDuelChoice("close")  (the Duel Record power)
+    TTY_Main    calls window.ttyYield(json)    {name, how, death (1|0), murder (1|0), note}  and hears
+                window.ttyDuelChoice("accept"|"keep"|"death")  (the opponent yields). "To the death"
+                opens the second card, and "death" is sent only from there; Back returns to the first.
   ttyOffer's json may also carry rec: the player's record against that opponent, or "".
   Each script registered its own listener, so an answer only reaches the one that asked.
   Same look as Hours Well Spent's page. Fonts are the ones Windows ships, as SeverActions does, so
@@ -60,6 +64,8 @@
   button.quiet { color: var(--ink-soft); border-color: var(--line); }
   button:hover { border-color: var(--accent); }
   button.primary:hover { background: #d8b673; }
+  button.danger { color: #e3a08f; border-color: #6e3d33; }
+  button.danger:hover { border-color: #e3a08f; }
   .rec { margin: 0; font-family: var(--sans); font-size: 14px; color: var(--accent); }
   .totals { display: flex; gap: 10px; }
   .total { flex: 1 1 0; padding: 12px 0 10px; border: 1px solid var(--line); border-radius: 3px; text-align: center; }
@@ -81,7 +87,7 @@
     <h1 id="offerTitle"></h1>
   </div>
   <div class="rule" aria-hidden="true"></div>
-  <p class="terms">Real weapons, fought until one of you yields or goes down. Nobody dies.</p>
+  <p class="terms">Weapons and magic, fought until one of you yields or goes down. Nobody dies unless you make it a duel to the death.</p>
   <p class="rec" id="offerRec"></p>
   <p class="meta">Sheathe your weapon to yield.</p>
   <div class="buttons">
@@ -100,7 +106,7 @@
     <h1 id="npcTitle"></h1>
   </div>
   <div class="rule" aria-hidden="true"></div>
-  <p class="terms">Real weapons, until one of them yields or goes down. Nobody dies.</p>
+  <p class="terms">Weapons and magic, until one of them yields or goes down. Nobody dies unless you allow a fight to the death.</p>
   <div class="buttons">
     <button type="button" class="primary" id="allow" data-choice="allow" data-ml-sound="ok">Allow</button>
     <div class="row">
@@ -109,6 +115,23 @@
     </div>
   </div>
   <p class="note">&ldquo;Stop it&rdquo; has you step between them, and they&rsquo;ll remember it. &ldquo;Silently&rdquo; doesn&rsquo;t.</p>
+</section>
+
+<section class="card" id="npcdeath" aria-labelledby="npcDeathTitle">
+  <div class="head">
+    <p class="kicker">TO THE YIELD</p>
+    <h1 id="npcDeathTitle"></h1>
+  </div>
+  <div class="rule" aria-hidden="true"></div>
+  <p class="terms" id="npcDeathTerms"></p>
+  <div class="buttons">
+    <button type="button" class="danger" data-choice="allow" data-ml-sound="ok">Allow it</button>
+    <div class="row">
+      <button type="button" id="npcDeathStop" data-choice="stop" data-ml-sound="cancel">Stop it</button>
+      <button type="button" class="quiet" data-choice="quiet" data-ml-sound="cancel">Stop it silently</button>
+    </div>
+  </div>
+  <p class="note">Stopping it lets the yield stand. &ldquo;Stop it&rdquo; has you step in, and they&rsquo;ll remember it. &ldquo;Silently&rdquo; doesn&rsquo;t.</p>
 </section>
 
 <section class="card" id="record" aria-labelledby="recordTitle">
@@ -127,6 +150,35 @@
   </div>
 </section>
 
+<section class="card" id="yield" aria-labelledby="yieldTitle">
+  <div class="head">
+    <p class="kicker">TO THE YIELD</p>
+    <h1 id="yieldTitle"></h1>
+  </div>
+  <div class="rule" aria-hidden="true"></div>
+  <p class="terms" id="yieldTerms"></p>
+  <div class="buttons">
+    <button type="button" class="primary" id="accept" data-choice="accept" data-ml-sound="ok">I accept your yield</button>
+    <button type="button" data-choice="keep" data-ml-sound="ok">Keep fighting, we&rsquo;re not done yet</button>
+    <button type="button" class="danger" id="toDeath" data-choice="todeath" data-ml-sound="ok">No. Until one of us is dead</button>
+  </div>
+  <p class="note" id="yieldNote"></p>
+</section>
+
+<section class="card" id="death" aria-labelledby="deathTitle">
+  <div class="head">
+    <p class="kicker">TO THE YIELD</p>
+    <h1 id="deathTitle">A duel to the death</h1>
+  </div>
+  <div class="rule" aria-hidden="true"></div>
+  <p class="terms" id="deathTerms"></p>
+  <p class="meta" id="deathLaw"></p>
+  <div class="buttons">
+    <button type="button" class="primary" id="deathBack" data-choice="back" data-ml-sound="cancel">Back</button>
+    <button type="button" class="danger" data-choice="death" data-ml-sound="ok">To the death</button>
+  </div>
+</section>
+
 <script>
 (function () {
   function parse(arg) {
@@ -137,8 +189,10 @@
   }
   function text(id, value) { document.getElementById(id).textContent = value || ''; }
   // Which card is up, and so which script's listener its answer goes to.
-  var LISTENER = { offer: 'ttyDuelChoice', npc: 'ttyNpcChoice', record: 'ttyDuelChoice' };
-  var CARDS = ['offer', 'npc', 'record'];
+  var LISTENER = { offer: 'ttyDuelChoice', npc: 'ttyNpcChoice', npcdeath: 'ttyNpcChoice', record: 'ttyDuelChoice', yield: 'ttyDuelChoice', death: 'ttyDuelChoice' };
+  var CARDS = ['offer', 'npc', 'npcdeath', 'record', 'yield', 'death'];
+  // What Escape answers on each card. On a yield it accepts, the answer that can't hurt anyone.
+  var ESCAPE = { offer: 'quiet', npc: 'quiet', npcdeath: 'quiet', record: 'quiet', yield: 'accept', death: 'back' };
   var current = '';
   var answered = false;
   function show(id, focusId) {
@@ -166,6 +220,16 @@
     var d = parse(arg);
     text('npcTitle', (d.a || 'Two of them') + ' and ' + (d.b || 'another') + ' are about to fight a duel');
     show('npc', 'allow');
+  };
+
+  // {w, l}: the winner refuses the loser's yield and wants a fight to the death. Focus starts on Stop it.
+  window.ttyNpcDeath = function (arg) {
+    var d = parse(arg);
+    var w = d.w || 'One of them';
+    var l = d.l || 'the other';
+    text('npcDeathTitle', w + ' wants a fight to the death');
+    text('npcDeathTerms', w + ' refuses ' + l + '’s yield. Allow it, and either of them can die. Nothing will stop it.');
+    show('npcdeath', 'npcDeathStop');
   };
 
   // {name, w, l, d, foes:[{name, w, l, d, r}]}: the player's side. Most-fought opponents first.
@@ -208,6 +272,35 @@
     show('record', 'recClose');
   };
 
+  // {name, how: "downed"|"conceded", death: 1|0, murder: 1|0, note}. how is compared without case: Papyrus strings
+  // can come back with another script's capitals.
+  window.ttyYield = function (arg) {
+    var d = parse(arg);
+    var name = d.name || 'Your opponent';
+    text('yieldTitle', name + ' offers a yield');
+    text('yieldTerms', String(d.how || '').toLowerCase() === 'conceded'
+      ? name + ' lowers the blade and offers a yield.'
+      : name + ' is down and offers a yield.');
+    text('yieldNote', d.note);
+    document.getElementById('toDeath').style.display = Number(d.death) === 1 ? '' : 'none';
+    text('deathTerms', 'If you fight on, ' + name + ' can die, and so can you. Nothing will stop it.');
+    text('deathLaw', Number(d.murder) === 0
+      ? 'This duel is sanctioned: no law will count the killing.'
+      : 'Killing ' + name + ' is murder in the eyes of the law.');
+    show('yield', 'accept');
+  };
+
+  // The two choices that stay on the page: opening the "to the death?" card, and Back from it.
+  function choose(choice) {
+    if (choice === 'todeath') {
+      if (current === 'yield') { show('death', 'deathBack'); }
+    } else if (choice === 'back') {
+      if (current === 'death') { show('yield', 'accept'); }
+    } else {
+      answer(choice);
+    }
+  }
+
   function answer(choice) {
     if (answered || !current) { return; }
     answered = true;
@@ -221,24 +314,25 @@
 
   var buttons = document.querySelectorAll('button[data-choice]');
   for (var i = 0; i < buttons.length; i++) {
-    buttons[i].addEventListener('click', function () { answer(this.getAttribute('data-choice')); });
+    buttons[i].addEventListener('click', function () { choose(this.getAttribute('data-choice')); });
   }
 
   // Keys are handled here rather than trusted to the engine: Ultralight has skipped DOM events before
   // (Political Engine's map never got contextmenu), and SeverActions' prompts listen for keys themselves.
-  // Enter presses the focused button; Escape is the silent no. Magelight may also leave UI mode on
-  // Escape; the scripts count only the first answer.
+  // Enter presses the focused button; Escape gives the card's ESCAPE answer (the silent no on an offer).
+  // Magelight may also leave UI mode on Escape; the scripts count only the first answer, and treat
+  // leaving UI mode on a yield as accepting it.
   document.addEventListener('keydown', function (e) {
     if (!current) { return; }
     if (e.key === 'Enter' || e.keyCode === 13) {
       var f = document.activeElement;
       if (f && f.getAttribute && f.getAttribute('data-choice')) {
         e.preventDefault();
-        answer(f.getAttribute('data-choice'));
+        choose(f.getAttribute('data-choice'));
       }
     } else if (e.key === 'Escape' || e.keyCode === 27) {
       e.preventDefault();
-      answer('quiet');
+      choose(ESCAPE[current]);
     }
   });
 })();

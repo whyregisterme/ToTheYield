@@ -3,7 +3,7 @@
   "EditorID": "TTY_NpcConfirmMsg",
   "Description": {
     "TargetLanguage": "English",
-    "Value": "Two of them are about to fight a duel: real weapons, until one of them yields or goes down. Nobody dies."
+    "Value": "Two of them are about to fight a duel: weapons and magic, until one of them yields or goes down. Nobody dies unless you allow a fight to the death."
   },
   "INAM": "0x00000000",
   "Quest": "000805:ToTheYield.esp",

@@ -1,0 +1,33 @@
+{
+  "FormKey": "000813:ToTheYield.esp",
+  "EditorID": "TTY_NpcDeathMsg",
+  "Description": {
+    "TargetLanguage": "English",
+    "Value": "One of them refuses the other's yield and wants a fight to the death. Allow it, and either of them can die."
+  },
+  "INAM": "0x00000000",
+  "Quest": "000805:ToTheYield.esp",
+  "Flags": [
+    "MessageBox"
+  ],
+  "MenuButtons": [
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Allow"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Stop it"
+      }
+    },
+    {
+      "Text": {
+        "TargetLanguage": "English",
+        "Value": "Stop it silently"
+      }
+    }
+  ]
+}

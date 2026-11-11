@@ -23,6 +23,11 @@
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "DeathConfirmMsg",
+            "Object": "000811:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
             "Name": "DuelistFaction",
             "Object": "000808:ToTheYield.esp"
           },
@@ -45,6 +50,11 @@
           },
           {
             "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "SanctionedDeath",
+            "Object": "000812:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
             "Name": "UseBrawlFaction",
             "Object": "000802:ToTheYield.esp"
           },
@@ -52,6 +62,16 @@
             "MutagenObjectType": "ScriptObjectProperty",
             "Name": "UseMagelight",
             "Object": "00080C:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "YieldMercyMsg",
+            "Object": "000810:ToTheYield.esp"
+          },
+          {
+            "MutagenObjectType": "ScriptObjectProperty",
+            "Name": "YieldMsg",
+            "Object": "00080F:ToTheYield.esp"
           }
         ]
       }

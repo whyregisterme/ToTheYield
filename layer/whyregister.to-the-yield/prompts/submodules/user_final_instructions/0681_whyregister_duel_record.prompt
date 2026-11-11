@@ -8,7 +8,7 @@
 {% set l = papyrus_util("GetIntValue", npc.UUID, "TTY_RecL", 0) %}
 {% set d = papyrus_util("GetIntValue", npc.UUID, "TTY_RecD", 0) %}
 {% if w + l + d > 0 %}
-- Your record in formal duels to the yield: {{ w }} won, {{ l }} lost{% if d > 0 %}, {{ d }} drawn{% endif %}.
+- Your record in duels: {{ w }} won, {{ l }} lost{% if d > 0 %}, {{ d }} drawn{% endif %}.
 {% endif %}
 {% if responseTarget and responseTarget.UUID != 0 %}
 {% if responseTarget.type == "player" %}
