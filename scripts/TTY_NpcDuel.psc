@@ -94,6 +94,7 @@ float lastRekick = 0.0
 float disengagedSince = 0.0
 float challengeTime = 0.0
 int uiView = 0             ; the Magelight page this session, 0 = message boxes
+bool uiFailed = false      ; the page failed to load this session: message boxes, no retry
 int saHandle = 0           ; SeverActions' duel (a same-side pair, TTY_SA), 0 = To the Yield's own
 bool saStarted = false     ; SeverActions has started the fight
 float saStartedAt = 0.0
@@ -128,6 +129,11 @@ Function SetupUI()
     if !UseMagelight || UseMagelight.GetValue() <= 0
         return
     endif
+    uiFailed = false
+    SetupPage()
+EndFunction
+
+Function SetupPage()
     uiView = TTY_UI.Setup("ttyNpcChoice")
     if uiView
         RegisterForModEvent("Magelight_JS_ttyNpcChoice", "OnUiChoice")
@@ -136,7 +142,12 @@ Function SetupUI()
     endif
 EndFunction
 
+; Also the retry: no page yet this session means set it up again now, unless the page itself failed to
+; load (OnUiFailed). RegisterMod is idempotent, so this is safe to repeat.
 bool Function UiReady()
+    if uiView == 0 && !uiFailed && UseMagelight && UseMagelight.GetValue() > 0
+        SetupPage()
+    endif
     return uiView != 0 && !uiShowing && UseMagelight && UseMagelight.GetValue() > 0
 EndFunction
 
@@ -340,6 +351,7 @@ Function OnUiFailed(string asEventName, string asDetail, float afView, Form akSe
     bool wasShowing = uiShowing
     uiShowing = false
     uiView = 0
+    uiFailed = true
     if wasShowing
         TTY_UI.Close(afView as int)
         if deathShowing

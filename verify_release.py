@@ -52,7 +52,7 @@ expected = [
     'Scripts/TTY_SA.pex',
     'Scripts/TTY_SABridge.pex',
     'Magelight/ToTheYield/manifest.json',
-    'Magelight/ToTheYield/views/prompt/index.html',
+    'Magelight/ToTheYield/views/tty_page/index.html',
     'ToTheYield_DISTR.ini',
     layer + 'manifest.json',
     layer + 'actions/BeginDuel.yaml',

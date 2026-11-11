@@ -111,7 +111,7 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 ## Console levers
 
 - `set TTY_UseMagelight to 0`: always the message boxes, even with Magelight installed (say, on a
-  controller). Set it back to `1` and load a save to bring the page back.
+  controller). Set it back to `1` and the page comes back at the next card.
 - `set TTY_UseBrawlFaction to 0`: keeps you and your opponent out of the vanilla brawl faction. Default
   1. Without it, your opponent's friends (fellow guards, the Companions) join in on their side.
 - `set TTY_SanctionedDeath to 1`: sanctioned duels to the death. Your opponent leaves their crime

@@ -60,8 +60,18 @@ echo "== 2/6 build $NAME.esp"
 bash "$TOOLS/spriggit-cli.sh" deserialize --InputPath "$HERE/spriggit/$NAME" --OutputPath "$STAGE/$NAME.esp" 2>&1 | tail -1
 
 echo "== 3/6 round-trip check"
-bash "$TOOLS/spriggit-cli.sh" serialize --InputPath "$STAGE/$NAME.esp" --OutputPath "$BUILD/roundtrip/$NAME" \
+# Spriggit itself, not tools/spriggit-cli.sh: from toolkit 4.0.0 that wrapper refuses any serialize
+# output without a .yaml file, and Spriggit.Json writes only .json (2026-11-11). The output is scratch
+# in build/, so the wrapper's careful publish isn't needed here. Run from a short temp folder, as the
+# wrapper does, because Spriggit fails on long nested paths.
+if type -P spriggit >/dev/null 2>&1; then SPRIGGIT=(spriggit); else SPRIGGIT=(dotnet tool run spriggit --); fi
+RT_WORK="$(mktemp -d "${TEMP:-/tmp}/tty-rt.XXXXXX")"
+cp "$STAGE/$NAME.esp" "$RT_WORK/"
+"${SPRIGGIT[@]}" serialize --InputPath "$(cygpath -w "$RT_WORK/$NAME.esp")" --OutputPath "$(cygpath -w "$RT_WORK/out")" \
     --GameRelease SkyrimSE --PackageName Spriggit.Json --PackageVersion 0.41.0 2>&1 | tail -1
+mkdir -p "$BUILD/roundtrip"
+cp -r "$RT_WORK/out" "$BUILD/roundtrip/$NAME"
+rm -rf -- "$RT_WORK"
 python - "$(cygpath -w "$HERE/spriggit/$NAME")" "$(cygpath -w "$BUILD/roundtrip/$NAME")" <<'EOF'
 import json, os, sys
 src, back = sys.argv[1], sys.argv[2]
