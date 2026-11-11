@@ -115,8 +115,9 @@ turn solid again when the duel ends. An NPC who was already a ghost stays one.
 - `set TTY_UseBrawlFaction to 0`: keeps you and your opponent out of the vanilla brawl faction. Default
   1. Without it, your opponent's friends (fellow guards, the Companions) join in on their side.
 - `set TTY_SanctionedDeath to 1`: sanctioned duels to the death. Your opponent leaves their crime
-  faction for the duel, so no hold counts the killing. Default 0 (it's murder). Untested against
-  every witness: a bystander's own faction may still report it.
+  faction for the duel, so no hold counts the killing. Default 0 (it's murder). This covers vanilla
+  bounties only: with SeverActions, a guard who witnesses the killing can still charge you with
+  murder, and you'll have to talk your way out of it.
 - If a duel ever gets stuck: `stopquest TTY_Quest`, then `startquest TTY_Quest`. If you're
   still unkillable afterwards: `setessential 7 0`.
 - A stuck NPC duel: `stopquest TTY_NpcDuelQuest`, then `startquest TTY_NpcDuelQuest`.
